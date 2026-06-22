@@ -2,6 +2,8 @@
 
 Production-ready OpenCode plugin that safely runs the Antigravity CLI (`agy` / Gemini) in headless mode as a sub-agent.
 
+**https://github.com/chigarow/antigravity-for-opencode**
+
 **Strictly follows the simplicity and non-intrusive design of https://github.com/yuting0624/antigravity-for-claude-code**
 
 ## What it does
@@ -40,7 +42,7 @@ You can safely load both plugins together.
    ```json
    {
      "plugin": [
-       "file:///absolute/path/to/opencode-plugins/dist/index.js"
+       "file:///absolute/path/to/antigravity-for-opencode/dist/index.js"
      ]
    }
    ```
@@ -56,13 +58,17 @@ The `agy` tool will now be available to the agent.
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
 - `timeout` (string, optional) — e.g. "5m", "10m", "300s". Default: "5m".
 - `yolo` (boolean, optional) — Auto-approve all permissions inside agy (use with extreme care).
+- `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`).
+- `continue` (boolean, optional) — Resume the most recent agy conversation.
+- `conversation` (string, optional) — Resume a specific agy conversation by ID.
+- `model` (string, optional) — Exact model name override (future-proof).
 
 ## Safety & isolation
 
 - Stdin is always detached (`< /dev/null`).
 - All errors are turned into `ToolResult` text + metadata.
 - Output is truncated at 100k characters as a hard safety cap.
-- Timeouts are handled by agy's own `--print-timeout` (no extra plugin-level kill needed).
+- Timeouts are handled by agy's own `--print-timeout`.
 - The calling agent is expected to verify results.
 
 ## Standalone script (for debugging)
@@ -95,4 +101,4 @@ Tests include:
 
 ## License
 
-MIT
+MIT © 2026 chigarow
