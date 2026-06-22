@@ -12,7 +12,7 @@
 set -euo pipefail
 
 TIER="flash"
-TIMEOUT="5m"
+TIMEOUT="10m"  # flash/flash-lo default; pro tier default is 15m; hard cap is 4h — see normalizeTimeout in src/agy-runner.ts
 DIR=""
 YOLO=0
 SANDBOX=0
@@ -32,7 +32,7 @@ Usage: agy-delegate.sh [options] "prompt"
 Options:
   -t, --tier <flash|flash-lo|pro>   Tier (default: flash)
   -d, --dir <path>                  Add workspace dir
-      --timeout <dur>               e.g. 5m, 10m (default 5m)
+      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash, 15m for pro; hard cap 4h)
       --yolo                        --dangerously-skip-permissions
       --sandbox                     Run with terminal restrictions
   -c, --continue                    Resume most recent agy conversation
