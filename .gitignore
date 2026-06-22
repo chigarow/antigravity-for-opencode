@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local history / session data
+.history/
+.sisyphus/
+.omo/
+
+# Environment & secrets
+.env
+.env.*
+*.log
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Bun
+.bun/
+bun.lockb
+
+# Test artifacts
+coverage/
+*.lcov
