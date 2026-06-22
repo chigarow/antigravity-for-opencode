@@ -3,8 +3,10 @@ import {
   buildAgyArgs,
   runAgy,
   AgyError,
+  parseConversationIdFromLog,
   type SpawnFn,
 } from "../src/agy-runner";
+
 
 function createFakeProc({
   stdout = "",
@@ -41,12 +43,12 @@ function createFakeProc({
 }
 
 describe("buildAgyArgs", () => {
-  test("defaults to flash tier and 5m timeout", () => {
+  test("defaults to flash tier and 10m timeout", () => {
     const args = buildAgyArgs({ prompt: "do something" });
     expect(args).toContain("--model");
     expect(args).toContain("Gemini 3.5 Flash (High)");
     expect(args).toContain("--print-timeout");
-    expect(args).toContain("5m");
+    expect(args).toContain("10m");
     expect(args).toContain("-p");
     expect(args[args.length - 1]).toBe("do something");
   });
@@ -73,15 +75,144 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("10m");
   });
 
+  test("coerces numeric ms (300000) to 5m", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: 300000 });
+    expect(args).toContain("5m");
+  });
+
+  test("coerces digit-string 300000 ms to 5m", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: "300000" });
+    expect(args).toContain("5m");
+  });
+
+  test("coerces numeric ms (600000) to 10m", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: 600000 });
+    expect(args).toContain("10m");
+  });
+
+  test("passes through formatted 300s string", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: "300s" });
+    expect(args).toContain("300s");
+  });
+
+  test("passes through formatted 15m string", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: "15m" });
+    expect(args).toContain("15m");
+  });
+
+  test("coerces small numeric ms (45000) to 45s", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: 45000 });
+    expect(args).toContain("45s");
+  });
+
+  test("normalizes 0 or small to seconds", () => {
+    expect(buildAgyArgs({ prompt: "x", timeout: 0 })).toContain("0s");
+    expect(buildAgyArgs({ prompt: "x", timeout: 5000 })).toContain("5s");
+  });
+
   test("always puts -p and prompt as last arguments", () => {
     const args = buildAgyArgs({ prompt: "final task here" });
     const pIndex = args.lastIndexOf("-p");
     expect(pIndex).toBeGreaterThan(0);
     expect(args[pIndex + 1]).toBe("final task here");
   });
+
+  // ---- tier-aware defaults + 4h cap ----
+
+  test("pro tier with no explicit timeout defaults to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "pro" });
+    expect(args).toContain("15m");
+  });
+
+  test("pro tier with explicit timeout uses the explicit value, not the tier default", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "pro", timeout: "5m" });
+    expect(args).toContain("5m");
+    expect(args).not.toContain("15m");
+  });
+
+  test("caps oversized string duration (100h) at 4h", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: "100h" });
+    expect(args).toContain("4h");
+    expect(args).not.toContain("100h");
+  });
+
+  test("caps oversized numeric ms (999999999) at 4h", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: 999_999_999 });
+    expect(args).toContain("4h");
+  });
+
+  // ---- INVALID_TIMEOUT: invalid numeric inputs surface as a structured error ----
+
+  test("throws INVALID_TIMEOUT for negative numeric ms", () => {
+    try {
+      buildAgyArgs({ prompt: "x", timeout: -1 });
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_TIMEOUT");
+      expect(e.details?.value).toBe(-1);
+    }
+  });
+
+  test("throws INVALID_TIMEOUT for NaN", () => {
+    try {
+      buildAgyArgs({ prompt: "x", timeout: Number.NaN });
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_TIMEOUT");
+    }
+  });
+
+  test("throws INVALID_TIMEOUT for Infinity", () => {
+    try {
+      buildAgyArgs({ prompt: "x", timeout: Number.POSITIVE_INFINITY });
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_TIMEOUT");
+    }
+  });
+
+  test("INVALID_TIMEOUT fires before spawn (buildAgyArgs is the throw site)", () => {
+    const neverSpawn: SpawnFn = (() => {
+      throw new Error("spawn must not run for INVALID_TIMEOUT");
+    }) as any;
+    // runAgy delegates to buildAgyArgs first, so this surfaces as INVALID_TIMEOUT
+    // without ever touching the spawn layer.
+    return expect(
+      runAgy({ prompt: "x", timeout: -1 }, neverSpawn)
+    ).rejects.toMatchObject({ code: "INVALID_TIMEOUT" });
+  });
+
+  test("literal 0 still coerces to 0s (preserved policy)", () => {
+    const args = buildAgyArgs({ prompt: "x", timeout: 0 });
+    expect(args).toContain("0s");
+  });
 });
 
+
 describe("runAgy (injected spawn)", () => {
+  // Date.now mock plumbing for tests that need a non-zero observed duration.
+  let realNow: () => number;
+  let savedNow: (() => number) | null = null;
+
+  afterEach(() => {
+    if (savedNow) {
+      Date.now = savedNow;
+      savedNow = null;
+    }
+  });
+
+  function fakeElapsed(elapsedMs: number) {
+    realNow = Date.now;
+    let calls = 0;
+    // First Date.now() (start) returns the real time;
+    // every subsequent call returns start + elapsedMs.
+    Date.now = () => realNow() + (++calls >= 2 ? elapsedMs : 0);
+    savedNow = realNow;
+  }
+
   test("returns stdout on success", async () => {
     const fakeSpawn: SpawnFn = (() =>
       createFakeProc({
@@ -110,6 +241,8 @@ describe("runAgy (injected spawn)", () => {
     } catch (e: any) {
       expect(e.code).toBe("AGY_FAILED");
       expect(e.details?.exitCode).toBe(2);
+      // durationMs is now attached on every AgyError.
+      expect(typeof e.details?.durationMs).toBe("number");
     }
   });
 
@@ -142,6 +275,39 @@ describe("runAgy (injected spawn)", () => {
       expect(e.code).toBe("AUTH_REQUIRED");
     }
   });
+
+  test("classifies timeout error and surfaces explicit timeout in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Error: print-timeout exceeded for request",
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "slow", timeout: "15m" }, fakeSpawn);
+    } catch (e: any) {
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.timeout).toBe("15m");
+    }
+  });
+
+  test("classifies timeout error and surfaces default timeout (10m) in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Request timed out after --print-timeout",
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "slow" }, fakeSpawn);
+    } catch (e: any) {
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.timeout).toBe("10m");
+    }
+  });
+
 
   test("throws on empty output", async () => {
     const fakeSpawn: SpawnFn = (() =>
@@ -183,6 +349,433 @@ describe("runAgy (injected spawn)", () => {
       await runAgy({ prompt: "notfound" }, badSpawn);
     } catch (e: any) {
       expect(e.code).toBe("AGY_NOT_FOUND");
+      // AGY_NOT_FOUND happens before proc start, so durationMs may be 0 —
+      // what matters is that the field is present and the type is right.
+      expect(e.details).toHaveProperty("durationMs");
+      expect(typeof e.details.durationMs).toBe("number");
+    }
+  });
+
+  // ---- P0 enhancements: durationMs + suggestedNextTimeout ----
+
+  test("TIMEOUT attaches durationMs and suggestedNextTimeout (10m config, ~9m observed → '20m')", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Error: print-timeout exceeded for request",
+        exitCode: 1,
+      })) as any;
+
+    // Simulate a 9-minute run by advancing Date.now between the start
+    // and post-exit reads inside runAgy.
+    fakeElapsed(9 * 60 * 1000);
+
+    try {
+      await runAgy({ prompt: "slow", timeout: "10m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.timeout).toBe("10m");
+      expect(typeof e.details?.durationMs).toBe("number");
+      // 9 minutes ± small jitter from the real-now baseline.
+      expect(e.details.durationMs).toBeGreaterThanOrEqual(9 * 60 * 1000 - 1000);
+      // Heuristic: max(9m*1.5=13.5m→14m, 10m*2=20m, 15m) = 20m.
+      expect(e.details.suggestedNextTimeout).toBe("20m");
+    }
+  });
+
+  test("TIMEOUT with small configured timeout and short observed duration floors suggestion to 15m", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Error: print-timeout exceeded for request",
+        exitCode: 1,
+      })) as any;
+
+    // Configured 5m, observed 4m. Heuristic:
+    //   max(4m*1.5=6m, 5m*2=10m, 15m) = 15m
+    fakeElapsed(4 * 60 * 1000);
+
+    try {
+      await runAgy({ prompt: "slow", timeout: "5m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details.timeout).toBe("5m");
+      expect(e.details.suggestedNextTimeout).toBe("15m");
+    }
+  });
+
+  test("QUOTA_EXHAUSTED error includes durationMs and no suggestedNextTimeout", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "You have exceeded your quota for this model",
+        exitCode: 1,
+      })) as any;
+
+    fakeElapsed(3_500);
+
+    try {
+      await runAgy({ prompt: "quota" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("QUOTA_EXHAUSTED");
+      expect(typeof e.details?.durationMs).toBe("number");
+      expect(e.details.durationMs).toBeGreaterThanOrEqual(3_000);
+      // Non-timeout errors must not carry a suggestedNextTimeout.
+      expect(e.details.suggestedNextTimeout).toBeUndefined();
+    }
+  });
+
+  test("EMPTY_OUTPUT error includes durationMs in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "   \n\n  ",
+        stderr: "",
+        exitCode: 0,
+      })) as any;
+
+    fakeElapsed(2_200);
+
+    try {
+      await runAgy({ prompt: "empty" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("EMPTY_OUTPUT");
+      expect(typeof e.details?.durationMs).toBe("number");
+      expect(e.details.durationMs).toBeGreaterThanOrEqual(2_000);
+    }
+  });
+
+  test("result includes conversationId when opts.conversation is provided", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "ok",
+        stderr: "",
+        exitCode: 0,
+      })) as any;
+
+    const result = await runAgy(
+      { prompt: "x", conversation: "caller-supplied-id" },
+      fakeSpawn
+    );
+    expect(result.conversationId).toBe("caller-supplied-id");
+  });
+
+  test("TIMEOUT error.details includes conversationId from opts.conversation", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Error: print-timeout exceeded for request",
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy(
+        { prompt: "slow", conversation: "caller-conv-id", timeout: "5m" },
+        fakeSpawn
+      );
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.conversationId).toBe("caller-conv-id");
+      // The richer TIMEOUT fields stay intact.
+      expect(e.details?.timeout).toBe("5m");
+      expect(e.details?.suggestedNextTimeout).toBe("15m");
+    }
+  });
+
+  test("AGY_FAILED error.details includes conversationId from opts.conversation", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "some weird failure",
+        exitCode: 2,
+      })) as any;
+
+    try {
+      await runAgy(
+        { prompt: "fail", conversation: "caller-conv-id" },
+        fakeSpawn
+      );
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("AGY_FAILED");
+      expect(e.details?.conversationId).toBe("caller-conv-id");
+    }
+  });
+
+  test("runner extracts conversationId from agy log file when no opts.conversation was passed", async () => {
+    const { writeFileSync, existsSync } = await import("node:fs");
+    let capturedLogPath = "";
+    const fakeSpawn: SpawnFn = ((args: string[]) => {
+      const logIdx = (args as string[]).indexOf("--log-file");
+      expect(logIdx).toBeGreaterThanOrEqual(0);
+      capturedLogPath = (args as string[])[logIdx + 1];
+      writeFileSync(
+        capturedLogPath,
+        'conversationID="c376e6a4-1234-5678-9abc-def012345678" /usr/local/go/src/printmode.go:42\n'
+      );
+      return createFakeProc({
+        stdout: "ok",
+        stderr: "",
+        exitCode: 0,
+      });
+    }) as any;
+
+    const result = await runAgy({ prompt: "x" }, fakeSpawn);
+    expect(result.conversationId).toBe("c376e6a4-1234-5678-9abc-def012345678");
+    // Temp log file must be cleaned up after the run.
+    expect(capturedLogPath).not.toBe("");
+    expect(existsSync(capturedLogPath)).toBe(false);
+  });
+
+  test("opts.conversation takes priority over a value extracted from the log", async () => {
+    const { writeFileSync } = await import("node:fs");
+    const fakeSpawn: SpawnFn = ((args: string[]) => {
+      const logIdx = (args as string[]).indexOf("--log-file");
+      const logPath = (args as string[])[logIdx + 1];
+      writeFileSync(logPath, 'conversationID="from-log-id"\n');
+      return createFakeProc({
+        stdout: "ok",
+        stderr: "",
+        exitCode: 0,
+      });
+    }) as any;
+
+    const result = await runAgy(
+      { prompt: "x", conversation: "from-caller" },
+      fakeSpawn
+    );
+    // Caller wins.
+    expect(result.conversationId).toBe("from-caller");
+  });
+
+  // ---- Pure exit-code TIMEOUT classification (no stderr) ----
+
+  test("classifies exit code 124 (empty stderr) as TIMEOUT with default timeout echoed", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "",
+        exitCode: 124,
+      })) as any;
+
+    fakeElapsed(7 * 60 * 1000); // 7m observed
+
+    try {
+      await runAgy({ prompt: "killed" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      // Pure exit-code branch — nothing on stderr.
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.exitCode).toBe(124);
+      // 10m default (flash tier, no explicit timeout).
+      expect(e.details?.timeout).toBe("10m");
+      expect(typeof e.details?.durationMs).toBe("number");
+      expect(e.details.durationMs).toBeGreaterThanOrEqual(7 * 60 * 1000 - 1000);
+      // Heuristic: max(7m*1.5=11m→11m, 10m*2=20m, 15m) = 20m.
+      expect(e.details.suggestedNextTimeout).toBe("20m");
+    }
+  });
+
+  test("classifies exit code 143 (empty stderr) as TIMEOUT with explicit timeout echoed", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "",
+        exitCode: 143,
+      })) as any;
+
+    fakeElapsed(11 * 60 * 1000); // 11m observed
+
+    try {
+      await runAgy({ prompt: "sigterm", timeout: "12m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      // Pure exit-code branch — nothing on stderr.
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.exitCode).toBe(143);
+      // Explicit value surfaces in details, NOT the default.
+      expect(e.details?.timeout).toBe("12m");
+      expect(typeof e.details?.durationMs).toBe("number");
+      // Heuristic: max(11m*1.5=17m→17m, 12m*2=24m, 15m) = 24m.
+      expect(e.details.suggestedNextTimeout).toBe("24m");
+    }
+  });
+
+  // ---- INVALID_ARGS guard: continue + conversation is mutually exclusive ----
+
+  test("throws INVALID_ARGS when both continue and conversation are passed (spawn never runs)", async () => {
+    const neverSpawn: SpawnFn = (() => {
+      throw new Error("spawn must not be called for INVALID_ARGS");
+    }) as any;
+
+    try {
+      await runAgy(
+        { prompt: "x", continue: true, conversation: "abc" },
+        neverSpawn
+      );
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_ARGS");
+    }
+  });
+
+  // ---- timeout echo on every classified / structured error path ----
+
+  test("QUOTA_EXHAUSTED error echoes timeout in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "You have exceeded your quota for this model",
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "q", timeout: "7m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("QUOTA_EXHAUSTED");
+      expect(e.details?.timeout).toBe("7m");
+    }
+  });
+
+  test("AUTH_REQUIRED error echoes timeout in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Please authenticate with agy first",
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "a", timeout: "3m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("AUTH_REQUIRED");
+      expect(e.details?.timeout).toBe("3m");
+    }
+  });
+
+  test("AGY_FAILED error echoes explicit timeout in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "some weird failure",
+        exitCode: 2,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "fail", timeout: "8m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("AGY_FAILED");
+      expect(e.details?.timeout).toBe("8m");
+    }
+  });
+
+  test("AGY_FAILED error echoes the default timeout (10m) when no explicit timeout is passed", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "some weird failure",
+        exitCode: 2,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "fail" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("AGY_FAILED");
+      expect(e.details?.timeout).toBe("10m");
+    }
+  });
+
+  test("EMPTY_OUTPUT error echoes timeout in details", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "   \n\n  ",
+        stderr: "",
+        exitCode: 0,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "empty", timeout: "4m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("EMPTY_OUTPUT");
+      expect(e.details?.timeout).toBe("4m");
     }
   });
 });
+
+
+describe("parseConversationIdFromLog", () => {
+  test("extracts conversationID=\"<id>\" (most explicit form)", () => {
+    expect(
+      parseConversationIdFromLog(
+        'conversationID="c376e6a4-1234-5678-9abc-def012345678"'
+      )
+    ).toBe("c376e6a4-1234-5678-9abc-def012345678");
+  });
+
+  test("extracts unquoted conversationID=<id>", () => {
+    expect(
+      parseConversationIdFromLog("conversationID=c376e6a4-no-quotes-here")
+    ).toBe("c376e6a4-no-quotes-here");
+  });
+
+  test("extracts quoted \\bconversation=\"<id>\"", () => {
+    expect(parseConversationIdFromLog('conversation="abc-123"')).toBe("abc-123");
+  });
+
+  test("extracts unquoted \\bconversation=<id>", () => {
+    expect(parseConversationIdFromLog("using conversation=abc-123 now")).toBe(
+      "abc-123"
+    );
+  });
+
+  test("extracts 'Conversation using project ID: <id>'", () => {
+    expect(
+      parseConversationIdFromLog("Conversation using project ID: proj-xyz-789")
+    ).toBe("proj-xyz-789");
+  });
+
+  test("extracts UUID after the word 'conversation'", () => {
+    expect(
+      parseConversationIdFromLog(
+        "resuming conversation 11111111-2222-3333-4444-555555555555 now"
+      )
+    ).toBe("11111111-2222-3333-4444-555555555555");
+  });
+
+  test("returns undefined when no match", () => {
+    expect(parseConversationIdFromLog("some random log line, no id here")).toBeUndefined();
+  });
+
+  test("returns undefined for empty input", () => {
+    expect(parseConversationIdFromLog("")).toBeUndefined();
+  });
+
+  test("prefers explicit conversationID=\"...\" over a bare UUID after 'conversation'", () => {
+    const log =
+      'conversationID="primary-id" then conversation 11111111-2222-3333-4444-555555555555';
+    expect(parseConversationIdFromLog(log)).toBe("primary-id");
+  });
+
+  test("does not match 'myconversation=' (word boundary enforced)", () => {
+    expect(parseConversationIdFromLog("myconversation=should-not-match")).toBeUndefined();
+  });
+
+  test("extracts the ID even when surrounded by printmode.go path noise", () => {
+    const log =
+      'INFO agy conversationID="c376e6a4-9abc-def0-1234-56789abcdef0" /usr/local/go/src/printmode.go:128 msg="starting"';
+    expect(parseConversationIdFromLog(log)).toBe(
+      "c376e6a4-9abc-def0-1234-56789abcdef0"
+    );
+  });
+});
+
