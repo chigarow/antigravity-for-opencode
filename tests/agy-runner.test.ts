@@ -4,9 +4,11 @@ import {
   runAgy,
   AgyError,
   parseConversationIdFromLog,
+  scrubSecrets,
   type SpawnFn,
 } from "../src/agy-runner";
-
+import path from "node:path";
+import { statSync } from "node:fs";
 
 function createFakeProc({
   stdout = "",
@@ -779,3 +781,58 @@ describe("parseConversationIdFromLog", () => {
   });
 });
 
+describe("secure log directory (S1)", () => {
+  test("creates log file under os.tmpdir() private 0700 subdir", async () => {
+    let capturedLogPath = "";
+    const fakeSpawn: SpawnFn = ((args: string[]) => {
+      const logIdx = (args as string[]).indexOf("--log-file");
+      if (logIdx >= 0) capturedLogPath = (args as string[])[logIdx + 1];
+      return createFakeProc({ stdout: "ok", stderr: "", exitCode: 0 });
+    }) as any;
+
+    await runAgy({ prompt: "x" }, fakeSpawn);
+
+    expect(capturedLogPath).toBeTruthy();
+    const dir = path.dirname(capturedLogPath);
+    // Must be under tmpdir and contain our private subdir name
+    expect(dir).toContain("opencode-agy-logs");
+    // Verify 0700 permissions on the directory
+    const st = statSync(dir);
+    const mode = st.mode & 0o777;
+    expect(mode).toBe(0o700);
+  });
+});
+
+describe("stderr secret scrubbing (S2)", () => {
+  test("scrubs secrets from AGY_FAILED details.stderr while classification still works", async () => {
+    const secretStderr =
+      "Error: auth failed\nAuthorization: Bearer sk-abc123xyz\npassword=supersecret123";
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({ stdout: "", stderr: secretStderr, exitCode: 1 })) as any;
+
+    try {
+      await runAgy({ prompt: "fail" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("AGY_FAILED");
+      const scrubbed = e.details?.stderr as string;
+      expect(scrubbed).toBeDefined();
+      expect(scrubbed).not.toContain("sk-abc123xyz");
+      expect(scrubbed).not.toContain("supersecret123");
+      expect(scrubbed).toContain("[REDACTED]");
+      // classifyError still saw raw (it matched nothing specific here, but the path is exercised)
+    }
+  });
+
+  test("scrubs secrets from success result.stderr", async () => {
+    const secretStderr = "token=ghp_1234567890abcdef password=foo";
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({ stdout: "ok", stderr: secretStderr, exitCode: 0 })) as any;
+
+    const result = await runAgy({ prompt: "x" }, fakeSpawn);
+    expect(result.stderr).toBeDefined();
+    expect(result.stderr).not.toContain("ghp_1234567890abcdef");
+    expect(result.stderr).not.toContain("password=foo");
+    expect(result.stderr).toContain("[REDACTED]");
+  });
+});

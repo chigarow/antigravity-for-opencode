@@ -1,6 +1,8 @@
 import { spawn } from "bun";
 import { unlink } from "node:fs/promises";
-
+import { tmpdir } from "os";
+import path from "node:path";
+import { mkdir } from "node:fs/promises";
 
 export type Tier = "flash" | "flash-lo" | "pro";
 
@@ -387,10 +389,11 @@ export async function runAgy(
   const start = Date.now();
   const requestedConvId = opts.conversation?.trim() || undefined;
 
-  // Always tee agy's log to a unique temp file so we can pull the conversation
-  // ID back out after the run completes. Caller-supplied `conversation` wins
-  // over anything we'd extract from the log.
-  const logFile = `/tmp/agy-conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.log`;
+  // Always tee agy's log to a unique temp file inside a private 0700 subdirectory
+  // under the OS temp dir (via os.tmpdir()). This mitigates symlink races on shared hosts.
+  const logDir = path.join(tmpdir(), "opencode-agy-logs");
+  await mkdir(logDir, { recursive: true, mode: 0o700 });
+  const logFile = path.join(logDir, `agy-conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.log`);
   args.push("--log-file", logFile);
 
   try {
@@ -475,7 +478,7 @@ export async function runAgy(
         "AGY_FAILED",
         {
           exitCode: exit,
-          stderr: truncate(err, 2000),
+          stderr: scrubSecrets(truncate(err, 2000)),
           ...timeoutField,
           durationMs,
           ...convIdField(convId),
@@ -495,14 +498,15 @@ export async function runAgy(
 
     const result: AgyResult = {
       stdout: truncate(out, 100_000),
-      stderr: truncate(err, 2000),
+      stderr: scrubSecrets(truncate(err, 2000)),
       exitCode: exit,
       durationMs,
     };
     if (convId) result.conversationId = convId;
     return result;
   } finally {
-    // Best-effort cleanup — never let a leftover log file in /tmp break the call.
+    // Best-effort cleanup of the private temp log file (under os.tmpdir()/opencode-agy-logs).
+    // Never let a leftover log break the call or leak on disk.
     await unlink(logFile).catch(() => {});
   }
 }
@@ -553,3 +557,22 @@ function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max) + `\n... [truncated ${text.length - max} chars]`;
 }
+
+/**
+ * Best-effort secret scrubbing for stderr / logs before surfacing in results or errors.
+ * Replaces common token patterns with [REDACTED].
+ * Classification logic receives raw stderr.
+ */
+export function scrubSecrets(text: string): string {
+  if (!text) return text;
+  let s = text;
+  // Bearer tokens and Authorization headers
+  s = s.replace(/\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/gi, "Bearer [REDACTED]");
+  s = s.replace(/Authorization:\s*Bearer\s+[\^\s]+/gi, "Authorization: Bearer [REDACTED]");
+  // Common API key prefixes
+  s = s.replace(/\b(sk-[A-Za-z0-9]+|xox[baprs]-[A-Za-z0-9-]+)/gi, "[REDACTED]");
+  // password= token= secret= api_key= etc (case-insensitive)
+  s = s.replace(/\b(password|token|secret|api[_-]?key|apikey)\s*=\s*[^\s&"']+/gi, "$1=[REDACTED]");
+  return s;
+}
+

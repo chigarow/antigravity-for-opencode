@@ -1,6 +1,6 @@
 {
   "name": "opencode-agy",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Production-ready OpenCode plugin that safely runs the Antigravity CLI (agy / Gemini) in headless mode as a sub-agent. Thin, non-intrusive delegation tool. Follows the spirit of antigravity-for-claude-code.",
   "type": "module",
   "main": "./dist/index.js",

@@ -24,6 +24,7 @@ dist/
 # Bun
 .bun/
 bun.lockb
+bun.lock
 
 # Test artifacts
 coverage/
