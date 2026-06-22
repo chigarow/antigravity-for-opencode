@@ -43,9 +43,16 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe("Workspace directory to give agy (--add-dir)."),
 
           timeout: tool.schema
-            .string()
+            .union([tool.schema
+            .string(), tool.schema.number()])
             .optional()
-            .describe("Timeout string (e.g. '5m', '10m', '300s'). Passed to agy --print-timeout. Default: 5m."),
+            .describe(
+              "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or raw milliseconds (e.g. 300000 or 600000). " +
+              "Numbers/strings of digits are normalized to proper duration (300000 → '5m'). " +
+              "Default depends on tier: 'pro' defaults to '15m' (heavier work); flash/flash-lo default to '10m'. " +
+              "Hard upper bound: any value above 4h is silently clamped to '4h'. " +
+              "For long tasks (big merges, heavy refactors) use '15m' or '30m' and/or tier=pro."
+            ),
 
           yolo: tool.schema
             .boolean()
@@ -107,17 +114,24 @@ export const AgyPlugin: Plugin = async (ctx) => {
                 tool: "agy",
                 sandbox: !!args.sandbox,
                 resumed: !!(args.continue || args.conversation),
+                ...(result.conversationId ? { conversationId: result.conversationId } : {}),
               },
             };
           } catch (err: any) {
             // Never let agy failures crash the main opencode process.
             if (err instanceof AgyError) {
+              const convId = err.details?.conversationId;
+              const resumeHint = convId
+                ? `\nTo resume this exact conversation: pass conversation: "${convId}" (or --continue) together with a higher timeout (see details.suggestedNextTimeout) if available.`
+                : "";
+
               const body = [
                 `AGY_ERROR [${err.code}]`,
                 err.message,
                 err.details ? JSON.stringify(err.details, null, 2) : "",
                 "",
-                "agy sub-agent failed. Decide whether to retry, change tier, use --continue/--conversation, enable --sandbox, or handle manually.",
+                "agy sub-agent failed. Decide whether to retry with higher timeout (see details.suggestedNextTimeout or durationMs), change tier, use --continue/--conversation, enable --sandbox (or not for merges), or handle manually.",
+                resumeHint,
               ].join("\n");
 
               return {
@@ -127,6 +141,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
                   error: true,
                   code: err.code,
                   details: err.details,
+                  ...(convId ? { conversationId: convId } : {}),
                 },
               };
             }
