@@ -1,6 +1,6 @@
 {
   "name": "opencode-agy",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Production-ready OpenCode plugin that safely runs the Antigravity CLI (agy / Gemini) in headless mode as a sub-agent. Thin, non-intrusive delegation tool. Follows the spirit of antigravity-for-claude-code.",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,14 +11,23 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist", "scripts", "commands", "README.md"],
-  "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist"
+  "files": [
+    "dist",
+    "scripts",
+    "commands",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chigarow/antigravity-for-opencode.git"
   },
+  "homepage": "https://github.com/chigarow/antigravity-for-opencode",
+  "bugs": {
+    "url": "https://github.com/chigarow/antigravity-for-opencode/issues"
+  },
+  "author": "chigarow <gradito.tunggulcahyo@gmail.com>",
+  "license": "MIT",
   "keywords": [
     "opencode",
     "plugin",
@@ -29,10 +38,18 @@
     "delegation",
     "headless"
   ],
-  "author": "opencode-plugins",
-  "license": "MIT",
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
+    "build:types": "bunx tsc --emitDeclarationOnly",
+    "build:all": "bun run build && bun run build:types",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "bun run build:all"
+  },
   "peerDependencies": {
-    "@opencode-ai/plugin": "^0.1.0"
+    "@opencode-ai/plugin": "^1.0.0"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.17.9",
