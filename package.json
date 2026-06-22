@@ -11,7 +11,7 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist", "scripts", "README.md"],
+  "files": ["dist", "scripts", "commands", "README.md"],
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
     "test": "bun test",

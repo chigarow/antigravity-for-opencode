@@ -28,3 +28,7 @@ bun.lockb
 # Test artifacts
 coverage/
 *.lcov
+
+
+# OpenCode local project config (dev only)
+.opencode/

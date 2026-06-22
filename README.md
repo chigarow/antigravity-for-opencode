@@ -6,16 +6,18 @@ Production-ready OpenCode plugin that safely runs the Antigravity CLI (`agy` / G
 
 **Strictly follows the simplicity and non-intrusive design of https://github.com/yuting0624/antigravity-for-claude-code**
 
-## What it does
+This plugin lets you run the Antigravity CLI (`agy` / Gemini) as a safe sub-agent from inside OpenCode.
 
-Exposes a single tool named `agy` that the agent can call to delegate work to Gemini via the `agy` CLI in `--print` (headless) mode.
+It provides two surfaces, modeled after the Claude Code reference:
 
-The main agent stays in control and is responsible for verification. This plugin only does safe delegation.
+- **Tool `agy`** — the main agent can call this to delegate scoped work.
+- **Slash command `/agy`** — type `/agy your task here` directly in the TUI (shows up in the command menu).
 
 ## Key properties
 
-- **One tool only**: `agy`
-- **Zero hooks, zero commands** — completely non-intrusive
+- **One tool**: `agy` (the agent calls this to delegate)
+- **One slash command**: `/agy` (appears in the TUI command palette — type `/agy` to use it)
+- **Zero hooks** — completely non-intrusive and safe to load alongside oh-my-openagent or any other plugin
 - **Safe by design** — every failure (timeout, quota, auth, crash, empty output, not found) is caught and returned as structured text. The main opencode process is never impacted.
 - **Thin wrapper** — follows the reference architecture exactly.
 
@@ -47,9 +49,21 @@ You can safely load both plugins together.
    }
    ```
 
-3. Restart opencode.
+3. Install the `/agy` slash command (so it appears in the TUI command menu, just like the Claude Code reference):
 
-The `agy` tool will now be available to the agent.
+   ```bash
+   # Global (recommended — available in every project)
+   mkdir -p ~/.config/opencode/commands
+   cp commands/agy.md ~/.config/opencode/commands/agy.md
+
+   # Or per-project only
+   mkdir -p .opencode/commands
+   cp commands/agy.md .opencode/commands/agy.md
+   ```
+
+4. Restart opencode.
+
+   Both the `agy` tool (callable by the agent) and the `/agy` slash command (type it in the prompt) will be available.
 
 ## Tool arguments
 
@@ -62,6 +76,18 @@ The `agy` tool will now be available to the agent.
 - `continue` (boolean, optional) — Resume the most recent agy conversation.
 - `conversation` (string, optional) — Resume a specific agy conversation by ID.
 - `model` (string, optional) — Exact model name override (future-proof).
+
+## Slash command
+
+After installing the command file (step 3 in Installation), you can invoke agy directly from the OpenCode TUI prompt:
+
+```
+/agy write a full test suite for src/utils/math.ts
+/agy --tier pro --sandbox "scaffold the reports module"
+/agy --continue "finish the previous task and add docs"
+```
+
+This is the same experience as `/antigravity:delegate` in the Claude Code reference plugin. The main agent (you) is still responsible for reviewing the result.
 
 ## Safety & isolation
 

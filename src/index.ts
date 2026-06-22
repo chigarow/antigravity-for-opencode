@@ -10,11 +10,12 @@ import { runAgy, AgyError, type Tier } from "./agy-runner";
  * (Gemini) in true headless `--print` mode.
  *
  * Design goals (matching antigravity-for-claude-code reference):
- * - One tool. Zero hooks. Zero commands.
+ * - One tool (`agy`) + one slash command (`/agy`).
  * - Extremely non-intrusive (safe with oh-my-openagent and future plugins).
  * - All failures are caught and returned as text — host process is never crashed.
  * - Caller is always responsible for verification.
  * - Future-proof: supports --sandbox, --continue, --conversation, and exact model override.
+ * - Slash command is provided via commands/agy.md (OpenCode custom command mechanism).
  */
 export const AgyPlugin: Plugin = async (ctx) => {
   return {
