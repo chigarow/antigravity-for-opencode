@@ -1,21 +1,72 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
-import { runAgy, AgyError, type Tier } from "./agy-runner";
+import { runAgy, AgyError, type Tier, type AgyResult } from "./agy-runner";
+
+/**
+ * Arguments accepted by the agy tool and by {@link buildAgyToolResult}.
+ * Mirrors the tool schema one-to-one.
+ */
+export interface AgyToolArgs {
+  prompt: string;
+  tier?: Tier;
+  dir?: string;
+  project?: string;
+  timeout?: string | number;
+  yolo?: boolean;
+  sandbox?: boolean;
+  continue?: boolean;
+  conversation?: string;
+  model?: string;
+}
+
+/**
+ * Pure success-path builder for the agy tool result.
+ * Extracted so tests can verify header/metadata/warning logic without
+ * spawning real agy or leaking a global module mock.
+ */
+export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult) {
+  const header = [
+    `## agy result`,
+    `tier: ${args.tier ?? "flash"}`,
+    `duration: ${result.durationMs}ms`,
+    `exit: ${result.exitCode}`,
+    args.sandbox ? `sandbox: true` : "",
+    (args.continue || args.conversation) ? `resumed: true` : "",
+    (args.yolo && args.sandbox)
+      ? "WARNING: yolo (--dangerously-skip-permissions) + sandbox both enabled. agy will auto-approve every tool inside a restricted terminal."
+      : "",
+    ``,
+  ].filter(Boolean).join("\n");
+
+  return {
+    title: `agy (${args.tier ?? "flash"})`,
+    output: header + "\n" + result.stdout,
+    metadata: {
+      tier: args.tier ?? "flash",
+      durationMs: result.durationMs,
+      exitCode: result.exitCode,
+      tool: "agy",
+      sandbox: !!args.sandbox,
+      yolo: !!args.yolo,
+      resumed: !!(args.continue || args.conversation),
+      ...(result.conversationId ? { conversationId: result.conversationId } : {}),
+    },
+  };
+}
 
 /**
  * opencode-agy
  *
- * Minimal, production-ready, future-proof OpenCode plugin.
- * Exposes a single tool `agy` that delegates work to the Antigravity CLI
- * (Gemini) in true headless `--print` mode.
+ * OpenCode plugin that exposes a single `agy` tool for delegating scoped work
+ * to the Antigravity CLI in headless mode.
  *
- * Design goals (matching antigravity-for-claude-code reference):
- * - One tool (`agy`) + one slash command (`/agy`).
- * - Extremely non-intrusive (safe with oh-my-openagent and future plugins).
- * - All failures are caught and returned as text — host process is never crashed.
- * - Caller is always responsible for verification.
- * - Future-proof: supports --sandbox, --continue, --conversation, and exact model override.
- * - Slash command is provided via commands/agy.md (OpenCode custom command mechanism).
+ * Design goals:
+ * - One tool (`agy`) plus one slash command (`/agy`).
+ * - Small surface area and no hooks.
+ * - Failures are returned as text instead of crashing the host process.
+ * - The caller is still responsible for reviewing the result.
+ * - Supports `--sandbox`, `--continue`, `--conversation`, and exact model override.
+ * - Slash command is provided via commands/agy.md.
  */
 export const AgyPlugin: Plugin = async (ctx) => {
   return {
@@ -41,6 +92,11 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .string()
             .optional()
             .describe("Workspace directory to give agy (--add-dir)."),
+
+          project: tool.schema
+            .string()
+            .optional()
+            .describe("Project name to pass to agy (--project <value>)."),
 
           timeout: tool.schema
             .union([tool.schema
@@ -86,6 +142,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
               prompt: args.prompt,
               tier: args.tier as Tier | undefined,
               dir: args.dir,
+              project: args.project,
               timeout: args.timeout,
               yolo: args.yolo,
               sandbox: args.sandbox,
@@ -94,29 +151,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
               model: args.model,
             });
 
-            const header = [
-              `## agy result`,
-              `tier: ${args.tier ?? "flash"}`,
-              `duration: ${result.durationMs}ms`,
-              `exit: ${result.exitCode}`,
-              args.sandbox ? `sandbox: true` : "",
-              (args.continue || args.conversation) ? `resumed: true` : "",
-              ``,
-            ].filter(Boolean).join("\n");
-
-            return {
-              title: `agy (${args.tier ?? "flash"})`,
-              output: header + result.stdout,
-              metadata: {
-                tier: args.tier ?? "flash",
-                durationMs: result.durationMs,
-                exitCode: result.exitCode,
-                tool: "agy",
-                sandbox: !!args.sandbox,
-                resumed: !!(args.continue || args.conversation),
-                ...(result.conversationId ? { conversationId: result.conversationId } : {}),
-              },
-            };
+            return buildAgyToolResult(args, result);
           } catch (err: any) {
             // Never let agy failures crash the main opencode process.
             if (err instanceof AgyError) {

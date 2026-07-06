@@ -1,6 +1,7 @@
 # opencode-agy
 
-Production-ready OpenCode plugin that safely runs the Antigravity CLI (`agy` / Gemini) in headless mode as a sub-agent.
+OpenCode plugin for delegating scoped work to the Antigravity CLI (`agy` / Gemini) in headless mode.
+The wording in this README is intentionally qualified, because the plugin is a thin wrapper around an external CLI and its behavior still depends on the local environment, upstream agy, and the host agent's review.
 
 **https://github.com/chigarow/antigravity-for-opencode**
 
@@ -18,18 +19,18 @@ It provides two surfaces, modeled after the Claude Code reference:
 - **One tool**: `agy` (the agent calls this to delegate)
 - **One slash command**: `/agy` (appears in the TUI command palette — type `/agy` to use it)
 - **Zero hooks** — completely non-intrusive and safe to load alongside oh-my-openagent or any other plugin
-- **Safe by design** — every failure (timeout, quota, auth, crash, empty output, not found) is caught and returned as structured text. The main opencode process is never impacted.
+- **Safety boundary** — failures such as timeout, quota, auth, crash, empty output, and not found are captured and returned as text. The main OpenCode process stays up, but the result still needs human or agent review.
 - **Thin wrapper** — follows the reference architecture exactly.
 
 ## Compatibility
 
-This plugin has been verified to not clash with `oh-my-openagent` (the most common heavy plugin at the time of writing).
+This plugin does not claim perfect compatibility. It is designed to stay small, avoid hooks, and work alongside other plugins, but you should still review changes in a branch or worktree and inspect the diff before trusting a merge or other risky task.
 
 - Tool name `agy` does not exist in oh-my-openagent.
 - No hooks or commands are registered.
 - No shared config keys or namespaces.
 
-You can safely load both plugins together.
+You can usually load both plugins together, but treat that as a practical coexistence note, not a guarantee.
 
 ## Installation
 
@@ -101,22 +102,24 @@ If you also want to type `/agy your task` directly in the TUI (like the Claude C
 ## Tool arguments
 
 - `prompt` (string, required) — The task to send to agy/Gemini.
-- `tier` ("flash" | "flash-lo" | "pro", optional) — Default: "flash".
+- `tier` ("flash" | "flash-lo" | "pro", optional) — Default: "flash". `flash-lo` is the low-cost option.
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
-- `timeout` (string | number, optional) — Pass a duration string like "5m", "10m", "30m", "300s", or raw milliseconds (e.g. `300000`, `900000`, or the string `"900000"`); digit-only inputs are auto-normalized (300000 → "5m"). **Default depends on tier**: `tier: "pro"` defaults to `"15m"` (heavier work); `flash` / `flash-lo` default to `"10m"`. **Hard upper bound: any value above 4h is silently clamped to `"4h"`** — pair with `continue: true` and a higher value on retry if your task really needs more wall-clock time. For git merges, heavy refactors, and large test generation, set this explicitly ("15m"–"30m") and/or pair it with `tier: "pro"`. If the task still exceeds the limit, the plugin returns a `TIMEOUT` error code so the caller can retry with `continue: true` and a higher value.
-- `yolo` (boolean, optional) — Auto-approve all permissions inside agy (use with extreme care).
-- `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`).
-- `continue` (boolean, optional) — Resume the most recent agy conversation.
-- `conversation` (string, optional) — Resume a specific agy conversation by ID.
-- `model` (string, optional) — Exact model name override (future-proof).
+- `project` (string, optional) — Project name passed to agy (`--project <value>`). Useful for scoping agy's work to a specific Google Cloud project.
+- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier, `pro` defaults to `15m`, `flash` and `flash-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
+- `yolo` (boolean, optional) — Auto-approve all permissions inside agy. Only use with a reviewed diff, a throwaway branch or worktree, and `sandbox: true` when the task does not need direct filesystem or shell access.
+- `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`). Helpful for safer execution, but it can block merge or filesystem heavy work.
+- `continue` (boolean, optional) — Resume the most recent agy conversation. Mutually exclusive with `conversation`.
+- `conversation` (string, optional) — Resume a specific agy conversation by ID. Mutually exclusive with `continue`.
+- `model` (string, optional) — Exact model name override, including non-Gemini backends when the upstream CLI supports them.
 
 ### Handling long-running work
 
-A 5-minute default used to be enough, but real engineering tasks aren't. The motivating failure was a git merge that needed more time; default is now `10m` for `flash` / `flash-lo` and `15m` for `pro`, and you should go higher for anything known to be slow.
+A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash` and `flash-lo`, and `15m` for `pro`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
 
-- For **git merges with conflicts**, **heavy refactors**, and **large test generation**: pass `timeout: "15m"` or `timeout: "30m"`, set `tier: "pro"`. For merges specifically, **do not use `sandbox`** (it blocks the filesystem/shell ops git needs); use a fresh branch (`git checkout -b merge-attempt`) + `yolo: true` instead. The real safety is branch hygiene so you can `git merge --abort` if needed.
-- If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` (or a specific `conversation: <id>`) and a higher `timeout` — no need to re-prompt from scratch.
-- **Hard upper bound: 4h.** Any input that normalizes above `4h` (e.g. `"100h"`, `999999999`) is silently clamped to `"4h"` before being passed to agy. If your task truly needs more than 4h, plan to resume via `continue: true` / `conversation: <id>` after each 4h window — that is the supported long-running pattern, not a single oversized `--print-timeout`.
+- For **git merges with conflicts**, **heavy refactors**, and **large test generation**: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. Use `sandbox: true` only when the task does not need full shell or filesystem access. If you need to auto-approve permissions, `yolo: true` is a deliberate escalation, not a default. 
+- If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` or `conversation: <id>` and a higher `timeout`.
+- **Hard upper bound: 4h.** Any input that normalizes above `4h` is silently clamped to `4h` before being passed to agy.
+- The plugin also emits `AGY_NOT_FOUND` when the CLI is missing and `INVALID_TIMEOUT` when timeout parsing fails. Secrets are scrubbed from surfaced errors, and the wrapper writes its private temp log under a locked temp directory so conversation recovery can work without leaving a shared log behind.
 - Plain numbers work too: `timeout: 1800000` is the same as `timeout: "30m"`. Useful when the timeout is computed.
 Example for a slow merge:
 
@@ -138,11 +141,7 @@ Example for resuming after a timeout (slash-command form):
 
 Example for resuming after a timeout (programmatic form, using the returned `conversationId`):
 
-The plugin now tees agy's log to a temp file and extracts the conversation ID
-from it, then surfaces it on the success result and on **every** `AgyError`'s
-`details` (TIMEOUT, QUOTA, AUTH, AGY_FAILED, EMPTY, AGY_NOT_FOUND). The
-TIMEOUT error also carries `details.suggestedNextTimeout` from the previous
-session, so the retry is fully data-driven:
+The plugin tees agy's log to a private temp file, extracts the conversation ID from it, and surfaces it on the success result and on every `AgyError`'s `details`. The retry path should treat the returned payload as plain text plus metadata, not as a JSON envelope. On upstream builds, empty output and non-TTY behavior can still happen, so the caller should verify the result, inspect the diff, and decide whether to resume or stop.
 
 ```ts
 // Pseudocode for an agent / orchestrator catching a TIMEOUT
@@ -157,27 +156,26 @@ try {
 } catch (e) {
   if (e.code !== "TIMEOUT") throw e;
 
-  // details is a plain object — read the surfaced conversationId + suggestion
+  // details is a plain object, read the surfaced conversationId + suggestion
   // and re-call without re-prompting.
   const { conversationId, suggestedNextTimeout } = e.details;
 
   await agy({
     prompt: "keep going, resolve the remaining conflicts and finish the merge",
-    // Either of these works; conversation is the precise resume handle:
+    // Resume a specific conversation (preferred):
     conversation: conversationId,
-    continue: true,
+    // ...or use --continue to resume the most recent one.
     timeout: suggestedNextTimeout ?? "30m",
   });
 }
 ```
 
-If you passed `conversation: "<id>"` on the first call, that same ID comes
-back on the error — pass it again on retry, exactly as you received it.
+If you passed `conversation: "<id>"` on the first call, that same ID comes back on the error, so pass it again on retry exactly as received.
 
 See [Tool arguments](#tool-arguments) above for the full list.
 ## Slash command
 
-After installing the command file (step 3 in Installation), you can invoke agy directly from the OpenCode TUI prompt:
+After installing the command file, you can invoke agy directly from the OpenCode TUI prompt:
 
 ```
 /agy write a full test suite for src/utils/math.ts
@@ -186,14 +184,14 @@ After installing the command file (step 3 in Installation), you can invoke agy d
 /agy --continue "finish the previous task and add docs"
 ```
 
-This is the same experience as `/antigravity:delegate` in the Claude Code reference plugin. The main agent (you) is still responsible for reviewing the result.
+Use `sandbox: true` for safer isolation when the task does not need full shell access. Use `yolo: true` only for deliberate, reviewed branch or worktree work. The main agent still owns verification, diff review, and any follow-up fixes.
 
 ## Safety & isolation
 
 - Stdin is always detached (`< /dev/null`).
 - All errors are turned into `ToolResult` text + metadata.
 - Output is truncated at 100k characters as a hard safety cap.
-- Timeouts are handled by agy's own `--print-timeout`, which is user-controllable via the `timeout` argument (see [Tool arguments](#tool-arguments) and [Handling long-running work](#handling-long-running-work) above). For long tasks, set an explicit higher value up front or plan to resume with `continue: true` / `conversation: <id>`.
+- Timeouts are handled by agy's own `--print-timeout`, which is user-controllable via the `timeout` argument. For long tasks, set an explicit higher value up front or plan to resume with `continue: true` or `conversation: <id>`.
 - The calling agent is expected to verify results.
 
 ## Standalone script (for debugging)

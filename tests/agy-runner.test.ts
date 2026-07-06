@@ -67,6 +67,16 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("/tmp/repo");
   });
 
+  test("adds --project when project provided", () => {
+    const args = buildAgyArgs({ prompt: "x", project: "my-proj" });
+    expect(args).toContain("--project");
+    expect(args).toContain("my-proj");
+    // -p and prompt must still be last
+    const pIndex = args.lastIndexOf("-p");
+    expect(pIndex).toBeGreaterThan(0);
+    expect(args[pIndex + 1]).toBe("x");
+  });
+
   test("adds --dangerously-skip-permissions when yolo=true", () => {
     const args = buildAgyArgs({ prompt: "x", yolo: true });
     expect(args).toContain("--dangerously-skip-permissions");
@@ -405,6 +415,27 @@ describe("runAgy (injected spawn)", () => {
       expect(e.code).toBe("TIMEOUT");
       expect(e.details.timeout).toBe("5m");
       expect(e.details.suggestedNextTimeout).toBe("15m");
+    }
+  });
+
+  test("TIMEOUT with 4h config and ~14m observed → '480m' (hours parsing)", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: "Error: print-timeout exceeded for request",
+        exitCode: 1,
+      })) as any;
+
+    fakeElapsed(14 * 60 * 1000);
+
+    try {
+      await runAgy({ prompt: "slow", timeout: "4h" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("TIMEOUT");
+      expect(e.details?.timeout).toBe("4h");
+      // Heuristic: max(14m*1.5=21m, 4h*2=480m, 15m) = 480m.
+      expect(e.details.suggestedNextTimeout).toBe("480m");
     }
   });
 
@@ -779,6 +810,62 @@ describe("parseConversationIdFromLog", () => {
       "c376e6a4-9abc-def0-1234-56789abcdef0"
     );
   });
+
+  // ---- Wave 5.5 regression: malformed conversationId from Go log noise ----
+
+  test("rejects pure-punctuation captures from Go log noise (E2E: conversationId=\"\"\")\"\)", () => {
+    // Real agy log noise that produced conversationId: "\"\")\"" in Wave 5 E2E.
+    // Pattern 4 (\bconversation=\S+) naively captures the punctuation blob.
+    expect(parseConversationIdFromLog('conversation="")')).toBeUndefined();
+    expect(
+      parseConversationIdFromLog('conversation="") /usr/local/go/src/printmode.go:42')
+    ).toBeUndefined();
+  });
+
+  test("rejects pure-punctuation unquoted conversationID capture", () => {
+    expect(parseConversationIdFromLog('conversationID="")')).toBeUndefined();
+  });
+
+  test("still extracts valid ID when malformed punctuation precedes it in the same log", () => {
+    const log =
+      'conversation="") /usr/local/go/src/printmode.go:42\n' +
+      'conversationID="ses_real123abc" /usr/local/go/src/printmode.go:128';
+    expect(parseConversationIdFromLog(log)).toBe("ses_real123abc");
+  });
+
+  // ---- Wave 5.5 follow-up: trailing punctuation normalization ----
+
+  test("strips trailing comma from UUID capture (live E2E: conversationId=<uuid>,)", () => {
+    const log = 'conversationID=2e456db3-ddc5-4310-98eb-54159bf7eb49,';
+    expect(parseConversationIdFromLog(log)).toBe(
+      "2e456db3-ddc5-4310-98eb-54159bf7eb49"
+    );
+  });
+
+  test("strips trailing period from unquoted conversation=<id>.", () => {
+    const log = 'conversation=ses_abc123XYZ.';
+    expect(parseConversationIdFromLog(log)).toBe("ses_abc123XYZ");
+  });
+
+  test("strips trailing semicolon and closing paren from Go log noise", () => {
+    const log =
+      'conversationID="2e456db3-ddc5-4310-98eb-54159bf7eb49"); msg="done"';
+    expect(parseConversationIdFromLog(log)).toBe(
+      "2e456db3-ddc5-4310-98eb-54159bf7eb49"
+    );
+  });
+
+  test("strips trailing closing quote from unquoted UUID capture", () => {
+    const log = 'conversation=2e456db3-ddc5-4310-98eb-54159bf7eb49"';
+    expect(parseConversationIdFromLog(log)).toBe(
+      "2e456db3-ddc5-4310-98eb-54159bf7eb49"
+    );
+  });
+
+  test("hyphenated ses_ IDs with internal hyphens are preserved", () => {
+    const log = 'conversationID="ses-abc-def-123",';
+    expect(parseConversationIdFromLog(log)).toBe("ses-abc-def-123");
+  });
 });
 
 describe("secure log directory (S1)", () => {
@@ -835,4 +922,13 @@ describe("stderr secret scrubbing (S2)", () => {
     expect(result.stderr).not.toContain("password=foo");
     expect(result.stderr).toContain("[REDACTED]");
   });
+
+  test("scrubSecrets scrubs Authorization: Bearer token", () => {
+    const scrubbed = scrubSecrets(
+      "Authorization: Bearer ya29.test123"
+    );
+    expect(scrubbed).toContain("[REDACTED]");
+    expect(scrubbed).not.toContain("ya29.test123");
+  });
 });
+

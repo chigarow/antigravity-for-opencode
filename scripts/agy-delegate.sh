@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# agy-delegate.sh — standalone robust wrapper around the Antigravity CLI (`agy`).
-# Matches the behavior of the opencode-agy plugin.
+# agy-delegate.sh — standalone wrapper around the Antigravity CLI (`agy`).
+# Matches the behavior of the opencode-agy plugin, with the same review and safety caveats.
 #
 # Usage examples:
-#   ./scripts/agy-delegate.sh "implement the feature"
+#   ./scripts/agy-delegate.sh --project . "implement the feature"
 #   ./scripts/agy-delegate.sh --tier pro --dir . "review this diff"
 #   ./scripts/agy-delegate.sh --continue "continue the previous task"
 #   echo "task" | ./scripts/agy-delegate.sh -
@@ -14,6 +14,7 @@ set -euo pipefail
 TIER="flash"
 TIMEOUT="10m"  # flash/flash-lo default; pro tier default is 15m; hard cap is 4h — see normalizeTimeout in src/agy-runner.ts
 DIR=""
+PROJECT=""
 YOLO=0
 SANDBOX=0
 CONTINUE=0
@@ -32,12 +33,13 @@ Usage: agy-delegate.sh [options] "prompt"
 Options:
   -t, --tier <flash|flash-lo|pro>   Tier (default: flash)
   -d, --dir <path>                  Add workspace dir
-      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash, 15m for pro; hard cap 4h)
-      --yolo                        --dangerously-skip-permissions
-      --sandbox                     Run with terminal restrictions
+      --project <path>              Wrapper alias for agy's project selection; forwarded to upstream agy
+      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash/flash-lo, 15m for pro; hard cap 4h)
+      --yolo                        --dangerously-skip-permissions; use only for deliberate reviewed branch or worktree work
+      --sandbox                     Run with terminal restrictions; safer, but may block merge or filesystem-heavy work
   -c, --continue                    Resume most recent agy conversation
       --conversation <id>           Resume specific conversation
-  -m, --model <exact>               Exact model name (future-proof)
+  -m, --model <exact>               Wrapper-only alias for exact model name, forwarded upstream
   -h, --help
 EOF
   exit 0
@@ -56,6 +58,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -t|--tier)       need "$#" "$1"; TIER="$2"; shift 2 ;;
     -d|--dir)        need "$#" "$1"; DIR="$2"; shift 2 ;;
+    --project)      need "$#" "$1"; PROJECT="$2"; shift 2 ;;
     --timeout)       need "$#" "$1"; TIMEOUT="$2"; shift 2 ;;
     --yolo)          YOLO=1; shift ;;
     --sandbox)       SANDBOX=1; shift ;;
@@ -79,6 +82,7 @@ fi
 
 ARGS=(--model "$MODEL" --print-timeout "$TIMEOUT")
 [ -n "$DIR" ] && ARGS+=(--add-dir "$DIR")
+[ -n "$PROJECT" ] && ARGS+=(--project "$PROJECT")
 [ "$YOLO" -eq 1 ] && ARGS+=(--dangerously-skip-permissions)
 [ "$SANDBOX" -eq 1 ] && ARGS+=(--sandbox)
 [ "$CONTINUE" -eq 1 ] && ARGS+=(--continue)

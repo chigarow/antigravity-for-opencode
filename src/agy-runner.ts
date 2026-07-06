@@ -11,6 +11,7 @@ export interface AgyOptions {
   tier?: Tier;
   dir?: string;
   timeout?: string | number;
+  project?: string;
   yolo?: boolean;
   sandbox?: boolean;
   continue?: boolean;
@@ -86,177 +87,91 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  * stable.
  */
 function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash"): string {
-
   if (t == null) return tier === "pro" ? "15m" : "10m";
 
-
-
   // Validate + coerce. The cap is applied uniformly to whatever this
-
   // returns so a 999_999_999 numeric input is clamped to "4h" the same
-
   // way a "100h" string is.
-
   const raw = normalizeRawTimeoutValue(t);
-
   return clampOversizedTimeout(raw);
-
 }
 
-
-
 /**
-
  * Coerce the raw timeout input to a string form, throwing on invalid
-
  * numeric values. The result may still exceed 4h — the caller applies
-
  * the cap (see `clampOversizedTimeout`).
-
  */
-
 function normalizeRawTimeoutValue(t: string | number | undefined): string {
-
   if (typeof t === "number") return normalizeNumericTimeout(t);
-
   const s = String(t).trim();
-
   if (/^\d+$/.test(s)) return normalizeDigitStringTimeout(s);
-
   return s;
-
 }
 
-
-
 /**
-
  * Validate a numeric timeout and return the string form. Throws
-
  * `AgyError { code: "INVALID_TIMEOUT" }` for NaN, ±Infinity, or negatives.
-
  * Returns "0s" for the literal 0 (preserves the historical "no timeout"
-
  * policy locked in by tests).
-
  */
-
 function normalizeNumericTimeout(t: number): string {
-
   if (!Number.isFinite(t)) {
-
     throw new AgyError(
-
       `invalid timeout: ${t} (must be a finite number of ms, or a duration string like "5m")`,
-
       "INVALID_TIMEOUT",
-
       { value: t }
-
     );
-
   }
-
   if (t < 0) {
-
     throw new AgyError(
-
       `invalid timeout: ${t} (must be ≥ 0)`,
-
       "INVALID_TIMEOUT",
-
       { value: t }
-
     );
-
   }
-
   // 0 → "0s" by policy; 4h cap is applied by the caller.
-
   if (t >= 60_000) return Math.ceil(t / 60_000) + "m";
-
   return Math.ceil(t / 1_000) + "s";
-
 }
 
-
-
 /**
-
  * Validate a digit-only string and return the string form. Same rules as
-
  * the numeric path: NaN / Infinity / negatives throw. "0" → "0s".
-
  */
-
 function normalizeDigitStringTimeout(s: string): string {
-
   const n = Number(s);
-
   if (!Number.isFinite(n) || n < 0) {
-
     throw new AgyError(
-
       `invalid timeout: "${s}" (digit-only strings must be a non-negative ms count)`,
-
       "INVALID_TIMEOUT",
-
       { value: s }
-
     );
-
   }
-
   if (n >= 60_000) return Math.ceil(n / 60_000) + "m";
-
   return Math.ceil(n / 1_000) + "s";
-
 }
-
-
 
 /**
-
  * If `result` parses back to a duration > 4h, return "4h". Otherwise
-
  * return `result` unchanged. This is the safety cap — a parsed-back
-
  * guard means any path that produces a recognizable duration string
-
  * (numeric ms, digit-string ms, or a unit-suffixed literal) is clamped.
-
  * Unparseable inputs (e.g. "abc") pass through unchanged.
-
  */
-
 function clampOversizedTimeout(result: string): string {
-
   if (!result) return result;
-
   const m = result.match(/^(\d+)\s*(h|m|s|ms)$/i);
-
   if (!m) return result;
-
   const n = Number(m[1]);
-
   const unit = m[2].toLowerCase();
-
   const ms =
-
     unit === "h" ? n * 3_600_000
-
     : unit === "m" ? n * 60_000
-
     : unit === "s" ? n * 1_000
-
     : n; // "ms"
-
   if (ms > MAX_TIMEOUT_MS) return "4h";
-
   return result;
-
 }
-
 
 /**
  * Format a duration in milliseconds as a short string agy understands.
@@ -276,9 +191,10 @@ function formatMsToDuration(ms: number): string {
 function parseTimeoutMs(timeout: string | number): number {
   if (typeof timeout === "number") return timeout;
   const s = String(timeout).trim();
-  const m = s.match(/^(\d+)\s*(m|s|ms)$/);
+  const m = s.match(/^(\d+)\s*(h|m|s|ms)$/);
   if (m) {
     const n = Number(m[1]);
+    if (m[2] === "h") return n * 3_600_000;
     if (m[2] === "m") return n * 60_000;
     if (m[2] === "s") return n * 1_000;
     return n;
@@ -304,6 +220,36 @@ function computeSuggestedNextTimeout(durationMs: number, used: string): string {
 }
 
 /**
+ * Validate that a captured conversation/session ID looks plausible.
+ * Real agy IDs always contain alphanumeric characters (UUIDs, ses_...,
+ * project-xxx shapes). Pure-punctuation captures like `"""` are noise
+ * from Go log formatting and must be rejected.
+ */
+function isPlausibleConversationId(id: string): boolean {
+  return id.length > 0 && /[A-Za-z0-9]/.test(id);
+}
+
+/**
+ * Strip trailing (and leading) punctuation that Go log formatting appends
+ * to captured IDs — e.g. `2e456db3-...-54159bf7eb49,` or `ses_abc")`.
+ * Hyphens and underscores inside the ID are preserved.
+ */
+function normalizeConversationId(id: string): string {
+  return id.replace(/^[.,;:)\]}"'!?<>]+|[.,;:)\]}"'!?<>]+$/g, "");
+}
+
+/**
+ * Normalize a raw capture, then validate the result is still plausible.
+ * Returns the cleaned ID, or undefined if nothing usable remains after
+ * normalization.
+ */
+function extractValidId(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = normalizeConversationId(raw);
+  return isPlausibleConversationId(cleaned) ? cleaned : undefined;
+}
+
+/**
  * Extract a non-empty conversation ID from a chunk of agy log content.
  * Pure: no I/O, no side effects. Order of patterns is priority order — the most
  * specific / explicit form wins, so `conversationID="..."` is preferred over a
@@ -316,40 +262,47 @@ function computeSuggestedNextTimeout(durationMs: number, used: string): string {
  *   5. "Conversation using project ID: <id>"
  *   6. "conversation <uuid>"   (UUID-shaped token right after the word)
  * Returns undefined if nothing matches.
+ * Captures are normalized: trailing/leading punctuation (commas, periods,
+ * semicolons, quotes, brackets) is stripped before validation.
  */
 export function parseConversationIdFromLog(log: string): string | undefined {
   if (!log) return undefined;
 
   // 1. conversationID="<id>" — most explicit, quoted.
-  let m = log.match(/conversationID\s*=\s*"([^"\s]+)"/i);
-  if (m && m[1]) return m[1];
+  let id = extractValidId(log.match(/conversationID\s*=\s*"([^"\s]+)"/i)?.[1]);
+  if (id) return id;
 
   // 2. conversationID=<id> — unquoted, bounded by whitespace.
-  m = log.match(/conversationID\s*=\s*(\S+)/i);
-  if (m && m[1]) return m[1];
+  id = extractValidId(log.match(/conversationID\s*=\s*(\S+)/i)?.[1]);
+  if (id) return id;
 
   // 3. \bconversation="<id>" — quoted. Word boundary prevents matching
   // inside "myconversation" or "aconversation=".
-  m = log.match(/\bconversation\s*=\s*"([^"\s]+)"/i);
-  if (m && m[1]) return m[1];
+  id = extractValidId(
+    log.match(/\bconversation\s*=\s*"([^"\s]+)"/i)?.[1]
+  );
+  if (id) return id;
 
   // 4. \bconversation=<id> — unquoted.
-  m = log.match(/\bconversation\s*=\s*(\S+)/i);
-  if (m && m[1]) return m[1];
+  id = extractValidId(log.match(/\bconversation\s*=\s*(\S+)/i)?.[1]);
+  if (id) return id;
 
   // 5. "Conversation using project ID: <id>" — Go log style.
-  m = log.match(/Conversation using project ID:\s*(\S+)/i);
-  if (m && m[1]) return m[1];
+  id = extractValidId(
+    log.match(/Conversation using project ID:\s*(\S+)/i)?.[1]
+  );
+  if (id) return id;
 
   // 6. "conversation <uuid>" — UUID-shaped token right after the word.
-  m = log.match(
-    /conversation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+  id = extractValidId(
+    log.match(
+      /conversation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+    )?.[1]
   );
-  if (m && m[1]) return m[1];
+  if (id) return id;
 
   return undefined;
 }
-
 
 export function buildAgyArgs(opts: AgyOptions): string[] {
   const model = opts.model || TIER_MODEL[opts.tier ?? "flash"];
@@ -370,6 +323,7 @@ export function buildAgyArgs(opts: AgyOptions): string[] {
   ];
 
   if (opts.dir) args.push("--add-dir", opts.dir);
+  if (opts.project) args.push("--project", opts.project);
   if (opts.yolo) args.push("--dangerously-skip-permissions");
   if (opts.sandbox) args.push("--sandbox");
   if (opts.continue) args.push("--continue");
@@ -532,7 +486,6 @@ async function readConvIdFromLog(logFile: string): Promise<string | undefined> {
   }
 }
 
-
 function classifyError(stderr: string, exitCode: number): AgyError | null {
   if (exitCode === 124 || exitCode === 143) {
     return new AgyError("agy print timeout", "TIMEOUT", { exitCode });
@@ -568,7 +521,7 @@ export function scrubSecrets(text: string): string {
   let s = text;
   // Bearer tokens and Authorization headers
   s = s.replace(/\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/gi, "Bearer [REDACTED]");
-  s = s.replace(/Authorization:\s*Bearer\s+[\^\s]+/gi, "Authorization: Bearer [REDACTED]");
+  s = s.replace(/Authorization:\s*Bearer\s+[^\s]+/gi, "Authorization: Bearer [REDACTED]");
   // Common API key prefixes
   s = s.replace(/\b(sk-[A-Za-z0-9]+|xox[baprs]-[A-Za-z0-9-]+)/gi, "[REDACTED]");
   // password= token= secret= api_key= etc (case-insensitive)
