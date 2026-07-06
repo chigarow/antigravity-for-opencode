@@ -22,6 +22,17 @@ It provides two surfaces, modeled after the Claude Code reference:
 - **Safety boundary** — failures such as timeout, quota, auth, crash, empty output, and not found are captured and returned as text. The main OpenCode process stays up, but the result still needs human or agent review.
 - **Thin wrapper** — follows the reference architecture exactly.
 
+## Will this get my Antigravity account banned?
+
+> **Short answer: No.**
+>
+> This plugin does not reverse-engineer, scrape, or bypass any Antigravity / Google API. It simply spawns the official `agy` CLI in headless mode — the exact same binary you would run from your terminal, with the exact same authentication and rate-limiting enforced by Google's servers.
+>
+> Every request goes through agy's standard authentication flow. Every quota check, rate limit, and abuse-detection mechanism on Google's side still applies identically. The plugin adds **zero additional calls** beyond what you would make manually.
+>
+> Think of it as a convenience wrapper: instead of typing `agy -p "your task"` in a separate terminal, OpenCode does it for you. Nothing more.
+
+
 ## Compatibility
 
 This plugin does not claim perfect compatibility. It is designed to stay small, avoid hooks, and work alongside other plugins, but you should still review changes in a branch or worktree and inspect the diff before trusting a merge or other risky task.
