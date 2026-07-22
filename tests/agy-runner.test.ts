@@ -45,7 +45,7 @@ function createFakeProc({
 }
 
 describe("buildAgyArgs", () => {
-  test("defaults to flash tier and 10m timeout", () => {
+  test("defaults to flash-3.5 tier and 10m timeout", () => {
     const args = buildAgyArgs({ prompt: "do something" });
     expect(args).toContain("--model");
     expect(args).toContain("Gemini 3.5 Flash (High)");
@@ -55,10 +55,19 @@ describe("buildAgyArgs", () => {
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps tiers correctly", () => {
-    expect(buildAgyArgs({ prompt: "x", tier: "flash" })).toContain("Gemini 3.5 Flash (High)");
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-lo" })).toContain("Gemini 3.5 Flash (Low)");
-    expect(buildAgyArgs({ prompt: "x", tier: "pro" })).toContain("Gemini 3.1 Pro (High)");
+  test("maps all four versioned tiers correctly", () => {
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5" })).toContain(
+      "Gemini 3.5 Flash (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5-lo" })).toContain(
+      "Gemini 3.5 Flash (Low)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "pro-3.1" })).toContain(
+      "Gemini 3.1 Pro (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6" })).toContain(
+      "Gemini 3.6 Flash (High)"
+    );
   });
 
   test("adds --add-dir when dir provided", () => {
@@ -131,15 +140,77 @@ describe("buildAgyArgs", () => {
 
   // ---- tier-aware defaults + 4h cap ----
 
-  test("pro tier with no explicit timeout defaults to 15m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro" });
+  test("pro-3.1 tier with no explicit timeout defaults to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1" });
     expect(args).toContain("15m");
   });
 
-  test("pro tier with explicit timeout uses the explicit value, not the tier default", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro", timeout: "5m" });
+  test("pro-3.1 tier with explicit timeout uses the explicit value, not the tier default", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1", timeout: "5m" });
     expect(args).toContain("5m");
     expect(args).not.toContain("15m");
+  });
+
+  // ---- flash-3.6 + timeout matrix + model override (TDD RED) ----
+
+  test("flash-3.6 maps to Gemini 3.6 Flash (High) and defaults timeout to 10m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
+    expect(args).toContain("Gemini 3.6 Flash (High)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.5-lo defaults timeout to 10m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.5-lo" });
+    expect(args).toContain("Gemini 3.5 Flash (Low)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.5 defaults timeout to 10m when tier is explicit", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.5" });
+    expect(args).toContain("Gemini 3.5 Flash (High)");
+    expect(args).toContain("10m");
+  });
+
+  test("model override wins when both model and tier are set", () => {
+    const args = buildAgyArgs({
+      prompt: "x",
+      tier: "flash-3.5",
+      model: "Custom Override Model",
+    });
+    expect(args).toContain("Custom Override Model");
+    expect(args).not.toContain("Gemini 3.5 Flash (High)");
+  });
+
+  // ---- INVALID_TIER: removed / unknown tier names ----
+
+  test("throws INVALID_TIER for removed tier name flash", () => {
+    try {
+      buildAgyArgs({ prompt: "x", tier: "flash" as any });
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_TIER");
+    }
+  });
+
+  test("throws INVALID_TIER for removed tier name flash-lo", () => {
+    try {
+      buildAgyArgs({ prompt: "x", tier: "flash-lo" as any });
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_TIER");
+    }
+  });
+
+  test("throws INVALID_TIER for removed tier name pro", () => {
+    try {
+      buildAgyArgs({ prompt: "x", tier: "pro" as any });
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("INVALID_TIER");
+    }
   });
 
   test("caps oversized string duration (100h) at 4h", () => {
@@ -604,7 +675,7 @@ describe("runAgy (injected spawn)", () => {
       // Pure exit-code branch — nothing on stderr.
       expect(e.code).toBe("TIMEOUT");
       expect(e.details?.exitCode).toBe(124);
-      // 10m default (flash tier, no explicit timeout).
+      // 10m default (flash-3.5 tier, no explicit timeout).
       expect(e.details?.timeout).toBe("10m");
       expect(typeof e.details?.durationMs).toBe("number");
       expect(e.details.durationMs).toBeGreaterThanOrEqual(7 * 60 * 1000 - 1000);
