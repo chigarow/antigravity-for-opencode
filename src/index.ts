@@ -86,7 +86,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
           tier: tool.schema
             .enum(["flash-3.5", "flash-3.5-lo", "pro-3.1", "flash-3.6"])
             .optional()
-            .describe("Model tier. flash-3.5 (default) = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, pro-3.1 = stronger Gemini 3.1 Pro."),
+            .describe("Model tier. flash-3.5 (default) = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.6 = latest fast model, pro-3.1 = stronger Gemini 3.1 Pro."),
 
           dir: tool.schema
             .string()

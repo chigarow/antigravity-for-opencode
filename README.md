@@ -113,10 +113,19 @@ If you also want to type `/agy your task` directly in the TUI (like the Claude C
 ## Tool arguments
 
 - `prompt` (string, required) — The task to send to agy/Gemini.
-- `tier` ("flash" | "flash-lo" | "pro", optional) — Default: "flash". `flash-lo` is the low-cost option.
+- `tier` ("flash-3.5" | "flash-3.5-lo" | "pro-3.1" | "flash-3.6", optional) — Default: "flash-3.5". `flash-3.5-lo` is the low-cost option, and `flash-3.6` is the new flash workhorse option.
+
+Tier names changed in this breaking release. The old names are unsupported and have no aliases.
+
+| Old name | New tier | Display name |
+| --- | --- | --- |
+| `flash` | `flash-3.5` | Gemini 3.5 Flash (High) |
+| `flash-lo` | `flash-3.5-lo` | Gemini 3.5 Flash (Low) |
+| `pro` | `pro-3.1` | Gemini 3.1 Pro (High) |
+| NEW | `flash-3.6` | Gemini 3.6 Flash (High) |
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
 - `project` (string, optional) — Project name passed to agy (`--project <value>`). Useful for scoping agy's work to a specific Google Cloud project.
-- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier, `pro` defaults to `15m`, `flash` and `flash-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
+- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier. `pro-3.1` defaults to `15m`; `flash-3.5`, `flash-3.5-lo`, and `flash-3.6` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
 - `yolo` (boolean, optional) — Auto-approve all permissions inside agy. Only use with a reviewed diff, a throwaway branch or worktree, and `sandbox: true` when the task does not need direct filesystem or shell access.
 - `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`). Helpful for safer execution, but it can block merge or filesystem heavy work.
 - `continue` (boolean, optional) — Resume the most recent agy conversation. Mutually exclusive with `conversation`.
@@ -125,7 +134,7 @@ If you also want to type `/agy your task` directly in the TUI (like the Claude C
 
 ### Handling long-running work
 
-A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash` and `flash-lo`, and `15m` for `pro`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
+A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash-3.5`, `flash-3.5-lo`, and `flash-3.6`, and `15m` for `pro-3.1`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
 
 - For **git merges with conflicts**, **heavy refactors**, and **large test generation**: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. Use `sandbox: true` only when the task does not need full shell or filesystem access. If you need to auto-approve permissions, `yolo: true` is a deliberate escalation, not a default. 
 - If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` or `conversation: <id>` and a higher `timeout`.
@@ -137,7 +146,7 @@ Example for a slow merge:
 ```json
 {
   "prompt": "merge feature/auth into main, resolve conflicts, run the full test suite",
-  "tier": "pro",
+  "tier": "pro-3.1",
   "timeout": "30m",
   "yolo": true,
   "dir": "/path/to/your/repo"
@@ -159,7 +168,7 @@ The plugin tees agy's log to a private temp file, extracts the conversation ID f
 try {
   await agy({
     prompt: "merge feature/auth into main, resolve conflicts, run the full test suite",
-    tier: "pro",
+    tier: "pro-3.1",
     timeout: "20m",
     yolo: true,
     dir: "/path/to/your/repo",
@@ -190,8 +199,8 @@ After installing the command file, you can invoke agy directly from the OpenCode
 
 ```
 /agy write a full test suite for src/utils/math.ts
-/agy --tier pro --sandbox "scaffold the reports module"
-/agy --tier pro --timeout 30m "merge feature/auth into main and resolve conflicts"
+/agy --tier pro-3.1 --sandbox "scaffold the reports module"
+/agy --tier pro-3.1 --timeout 30m "merge feature/auth into main and resolve conflicts"
 /agy --continue "finish the previous task and add docs"
 ```
 
@@ -208,7 +217,7 @@ Use `sandbox: true` for safer isolation when the task does not need full shell a
 ## Standalone script (for debugging)
 
 ```bash
-./scripts/agy-delegate.sh --tier flash "your task here"
+./scripts/agy-delegate.sh --tier flash-3.5 "your task here"
 echo "task" | ./scripts/agy-delegate.sh -
 ```
 

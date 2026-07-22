@@ -70,9 +70,8 @@ describe("buildAgyToolResult tier reporting", () => {
 
   test("explicit tier flash-3.6 propagates to header, title, and metadata", () => {
     // Given: buildAgyToolResult called with tier: "flash-3.6"
-    // (as any cast in RED — Tier union does not include flash-3.6 yet)
     const result = buildAgyToolResult(
-      { prompt: "x", tier: "flash-3.6" } as any,
+      { prompt: "x", tier: "flash-3.6" },
       fakeResult
     );
 
