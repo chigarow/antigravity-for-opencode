@@ -27,7 +27,7 @@ export interface AgyToolArgs {
 export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult) {
   const header = [
     `## agy result`,
-    `tier: ${args.tier ?? "flash"}`,
+    `tier: ${args.tier ?? "flash-3.5"}`,
     `duration: ${result.durationMs}ms`,
     `exit: ${result.exitCode}`,
     args.sandbox ? `sandbox: true` : "",
@@ -39,10 +39,10 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult) {
   ].filter(Boolean).join("\n");
 
   return {
-    title: `agy (${args.tier ?? "flash"})`,
+    title: `agy (${args.tier ?? "flash-3.5"})`,
     output: header + "\n" + result.stdout,
     metadata: {
-      tier: args.tier ?? "flash",
+      tier: args.tier ?? "flash-3.5",
       durationMs: result.durationMs,
       exitCode: result.exitCode,
       tool: "agy",
@@ -84,9 +84,9 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe("The task to send to agy/Gemini. Be specific and scoped."),
 
           tier: tool.schema
-            .enum(["flash", "flash-lo", "pro"])
+            .enum(["flash-3.5", "flash-3.5-lo", "pro-3.1", "flash-3.6"])
             .optional()
-            .describe("Model tier. flash (default) = fast/cheap Gemini 3.5 Flash High, flash-lo = cheapest, pro = stronger Gemini 3.1 Pro."),
+            .describe("Model tier. flash-3.5 (default) = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, pro-3.1 = stronger Gemini 3.1 Pro."),
 
           dir: tool.schema
             .string()
@@ -105,9 +105,9 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe(
               "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or raw milliseconds (e.g. 300000 or 600000). " +
               "Numbers/strings of digits are normalized to proper duration (300000 → '5m'). " +
-              "Default depends on tier: 'pro' defaults to '15m' (heavier work); flash/flash-lo default to '10m'. " +
+              "Default depends on tier: 'pro-3.1' defaults to '15m' (heavier work); flash-3.5/flash-3.5-lo default to '10m'. " +
               "Hard upper bound: any value above 4h is silently clamped to '4h'. " +
-              "For long tasks (big merges, heavy refactors) use '15m' or '30m' and/or tier=pro."
+              "For long tasks (big merges, heavy refactors) use '15m' or '30m' and/or tier=pro-3.1."
             ),
 
           yolo: tool.schema
