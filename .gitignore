@@ -72,3 +72,4 @@ config/gcloud/
 .google/
 **/.google/
 
+.cortexkit/*
