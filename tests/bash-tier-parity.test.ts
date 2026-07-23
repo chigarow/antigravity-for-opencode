@@ -27,7 +27,10 @@ const EXPECTED_TIERS = [
     slug: "flash-3.6",
     display: "Gemini 3.6 Flash (High)",
   },
-] as const;
+  {
+    slug: "flash-3.6-lo",
+    display: "Gemini 3.6 Flash (Low)",
+  },
 
 /** Case arm whose sole pattern is exactly `slug)` (no compound patterns). */
 function soleCaseArm(slug: string): RegExp {
@@ -60,17 +63,17 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
   });
 
-  test("usage help lists the four versioned tiers", () => {
+  test("usage help lists the five versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all four tier slugs
+    // When / Then: help documents all five tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
     // Tier option line should list them (not the legacy bare trio alone)
     expect(source).toMatch(
-      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*pro-3\.1[^>]*flash-3\.6[^>]*>/,
+      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*pro-3\.1[^>]*flash-3\.6[^>]*flash-3\.6-lo[^>]*>/,
     );
   });
 

@@ -55,7 +55,7 @@ describe("buildAgyArgs", () => {
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps all four versioned tiers correctly", () => {
+  test("maps all five versioned tiers correctly", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5" })).toContain(
       "Gemini 3.5 Flash (High)"
     );
@@ -67,6 +67,9 @@ describe("buildAgyArgs", () => {
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6" })).toContain(
       "Gemini 3.6 Flash (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" })).toContain(
+      "Gemini 3.6 Flash (Low)"
     );
   });
 
@@ -157,6 +160,21 @@ describe("buildAgyArgs", () => {
     const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
     expect(args).toContain("Gemini 3.6 Flash (High)");
     expect(args).toContain("10m");
+  });
+
+  test("flash-3.6-lo maps to Gemini 3.6 Flash (Low) and defaults timeout to 10m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
+    expect(args).toContain("Gemini 3.6 Flash (Low)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.6-lo is distinct from flash-3.6 (different model strings)", () => {
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
+    expect(loArgs).toContain("Gemini 3.6 Flash (Low)");
+    expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
+    expect(loArgs).not.toContain("Gemini 3.6 Flash (High)");
+    expect(hiArgs).not.toContain("Gemini 3.6 Flash (Low)");
   });
 
   test("flash-3.5-lo defaults timeout to 10m", () => {
