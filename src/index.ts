@@ -109,7 +109,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe(
               "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or raw milliseconds (e.g. 300000 or 600000). " +
               "Numbers/strings of digits are normalized to proper duration (300000 → '5m'). " +
-              "Default depends on tier: 'pro-3.1' defaults to '15m' (heavier work); flash-3.5/flash-3.5-lo default to '10m'. " +
+              "Default depends on tier: 'pro-3.1' defaults to '15m' (heavier work); flash-3.5/flash-3.5-lo/flash-3.6/flash-3.6-lo default to '10m'. " +
               "Hard upper bound: any value above 4h is silently clamped to '4h'. " +
               "For long tasks (big merges, heavy refactors) use '15m' or '30m' and/or tier=pro-3.1."
             ),

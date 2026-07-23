@@ -36,7 +36,7 @@ Options:
                                       Tier (default: flash-3.5)
   -d, --dir <path>                  Add workspace dir
       --project <path>              Wrapper alias for agy's project selection; forwarded to upstream agy
-      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.5, flash-3.5-lo, and flash-3.6; 15m for pro-3.1; hard cap 4h)
+      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.5, flash-3.5-lo, flash-3.6, and flash-3.6-lo; 15m for pro-3.1; hard cap 4h)
       --yolo                        --dangerously-skip-permissions; use only for deliberate reviewed branch or worktree work
       --sandbox                     Run with terminal restrictions; safer, but may block merge or filesystem-heavy work
   -c, --continue                    Resume most recent agy conversation

@@ -76,6 +76,8 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(source).toMatch(
       /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*pro-3\.1[^>]*flash-3\.6[^>]*flash-3\.6-lo[^>]*>/,
     );
+    // --timeout help line should list all non-pro tiers that default to 10m
+    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.6.*flash-3\.6-lo/);
   });
 
   test("unknown-tier die path is still present", () => {

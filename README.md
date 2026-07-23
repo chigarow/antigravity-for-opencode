@@ -204,7 +204,7 @@ To analyze a local file (PDF, PNG, image, or any binary agy's MCP tools can read
   "prompt": "Read this PDF and extract every line item into a markdown table.",
   "tier": "flash-3.6-lo",
   "dir": "/path/to/the/files/parent/directory",
-  "yolo": true
+  "sandbox": true
 }
 ```
 
