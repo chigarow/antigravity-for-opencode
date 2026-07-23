@@ -84,9 +84,9 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe("The task to send to agy/Gemini. Be specific and scoped."),
 
           tier: tool.schema
-            .enum(["flash-3.5", "flash-3.5-lo", "pro-3.1", "flash-3.6"])
+            .enum(["flash-3.5", "flash-3.5-lo", "pro-3.1", "flash-3.6", "flash-3.6-lo"])
             .optional()
-            .describe("Model tier. flash-3.5 (default) = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.6 = latest fast model, pro-3.1 = stronger Gemini 3.1 Pro."),
+            .describe("Model tier. flash-3.5 (default) = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.6 = latest fast model, flash-3.6-lo = cheapest 3.6 option, pro-3.1 = stronger Gemini 3.1 Pro."),
 
           dir: tool.schema
             .string()

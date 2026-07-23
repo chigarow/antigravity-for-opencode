@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 
-export type Tier = "flash-3.5" | "flash-3.5-lo" | "pro-3.1" | "flash-3.6";
+export type Tier = "flash-3.5" | "flash-3.5-lo" | "pro-3.1" | "flash-3.6" | "flash-3.6-lo";
 
 export interface AgyOptions {
   prompt: string;
@@ -51,6 +51,7 @@ const TIER_MODEL: Record<Tier, string> = {
   "flash-3.5-lo": "Gemini 3.5 Flash (Low)",
   "pro-3.1": "Gemini 3.1 Pro (High)",
   "flash-3.6": "Gemini 3.6 Flash (High)",
+  "flash-3.6-lo": "Gemini 3.6 Flash (Low)",
 };
 
 /**
@@ -66,7 +67,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  *
  * Tier-aware default when no explicit timeout is provided:
  *  - tier === "pro-3.1"   → "15m"  (heavier work, longer default)
- *  - any other tier       → "10m"  (flash-3.5, flash-3.5-lo, flash-3.6, or unspecified)
+ *  - any other tier       → "10m"  (flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-lo, or unspecified)
  *
  * Accepts:
  *  - undefined / null            → tier-aware default
