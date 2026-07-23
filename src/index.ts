@@ -76,7 +76,11 @@ export const AgyPlugin: Plugin = async (ctx) => {
           "Delegate a well-scoped task to Antigravity (agy / Gemini) in headless mode. " +
           "Best for bulk work, scaffolding, tests, research, or cross-model verification. " +
           "The main agent MUST verify the result. " +
-          "Supports resume (`continue` / `conversation`) and `--sandbox` for safer tool use.",
+          "Supports resume (`continue` / `conversation`) and `--sandbox` for safer tool use. " +
+          "For local file analysis (PDF, PNG, images), set `dir` to the file's parent directory AND set `yolo: true`. " +
+          "In headless mode, agy's file-reading tools (pdf-reader, read_file) default to 'Ask' permission which deadlocks without a TTY. " +
+          "`yolo: true` auto-approves all tool permissions; `dir` scopes the workspace so agy can access the file. " +
+          "`sandbox: true` is compatible with file reads (restricts only terminal commands).",
 
         args: {
           prompt: tool.schema
@@ -113,12 +117,12 @@ export const AgyPlugin: Plugin = async (ctx) => {
           yolo: tool.schema
             .boolean()
             .optional()
-            .describe("Auto-approve every tool inside agy (--dangerously-skip-permissions). Use only with --sandbox or throwaway dirs."),
+            .describe("Auto-approve every tool inside agy (--dangerously-skip-permissions). Use only with --sandbox or throwaway dirs. " + "Required for local file analysis (PDF/image) — agy's MCP tools need auto-approval in headless mode."),
 
           sandbox: tool.schema
             .boolean()
             .optional()
-            .describe("Run agy with terminal restrictions enabled (--sandbox). Recommended when giving broad permissions."),
+            .describe("Run agy with terminal restrictions enabled (--sandbox). Recommended when giving broad permissions. " + "Does not restrict file reads — only restricts terminal commands."),
 
           continue: tool.schema
             .boolean()
