@@ -31,6 +31,7 @@ const EXPECTED_TIERS = [
     slug: "flash-3.6-lo",
     display: "Gemini 3.6 Flash (Low)",
   },
+];
 
 /** Case arm whose sole pattern is exactly `slug)` (no compound patterns). */
 function soleCaseArm(slug: string): RegExp {
