@@ -2,8 +2,8 @@
 #
 # agy-delegate.sh — standalone wrapper around the Antigravity CLI (`agy`).
 # Matches the behavior of the opencode-agy plugin, with the same review and safety caveats.
-# Supports versioned tiers: flash-3.5 (default), flash-3.5-lo, pro-3.1, flash-3.6, and flash-3.6-lo.
-# Timeout defaults are 10m for flash-3.5, flash-3.5-lo, flash-3.6, and flash-3.6-lo; pro-3.1 uses 15m.
+# Supports versioned tiers: flash-3.5, flash-3.5-lo, pro-3.1, flash-3.6, flash-3.6-med (default), and flash-3.6-lo.
+# Timeout defaults are 10m for flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, and flash-3.6-lo; pro-3.1 uses 15m.
 #
 # Usage examples:
 #   ./scripts/agy-delegate.sh --project . "implement the feature"
@@ -12,8 +12,8 @@
 #
 set -euo pipefail
 
-TIER="flash-3.5"
-TIMEOUT="10m"  # flash-3.5, flash-3.5-lo, flash-3.6, and flash-3.6-lo default to 10m; pro-3.1 defaults to 15m; hard cap is 4h — see normalizeTimeout in src/agy-runner.ts
+TIER="flash-3.6-med"
+TIMEOUT="10m"  # flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, and flash-3.6-lo default to 10m; pro-3.1 defaults to 15m; hard cap is 4h — see normalizeTimeout in src/agy-runner.ts
 DIR=""
 PROJECT=""
 YOLO=0
@@ -32,11 +32,11 @@ Usage: agy-delegate.sh [options] "prompt"
        echo "prompt" | agy-delegate.sh -
 
 Options:
-  -t, --tier <flash-3.5|flash-3.5-lo|pro-3.1|flash-3.6|flash-3.6-lo>
-                                      Tier (default: flash-3.5)
+  -t, --tier <flash-3.5|flash-3.5-lo|pro-3.1|flash-3.6|flash-3.6-med|flash-3.6-lo>
+                                      Tier (default: flash-3.6-med)
   -d, --dir <path>                  Add workspace dir
       --project <path>              Wrapper alias for agy's project selection; forwarded to upstream agy
-      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.5, flash-3.5-lo, flash-3.6, and flash-3.6-lo; 15m for pro-3.1; hard cap 4h)
+      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, and flash-3.6-lo; 15m for pro-3.1; hard cap 4h)
       --yolo                        --dangerously-skip-permissions; use only for deliberate reviewed branch or worktree work
       --sandbox                     Run with terminal restrictions; safer, but may block merge or filesystem-heavy work
   -c, --continue                    Resume most recent agy conversation
@@ -49,11 +49,12 @@ EOF
 
 model_for_tier() {
   case "$1" in
-    flash-3.5)    echo "Gemini 3.5 Flash (High)" ;;
-    flash-3.5-lo) echo "Gemini 3.5 Flash (Low)" ;;
-    pro-3.1)      echo "Gemini 3.1 Pro (High)" ;;
-    flash-3.6)    echo "Gemini 3.6 Flash (High)" ;;
-    flash-3.6-lo) echo "Gemini 3.6 Flash (Low)" ;;
+    flash-3.5)     echo "Gemini 3.5 Flash (High)" ;;
+    flash-3.5-lo)  echo "Gemini 3.5 Flash (Low)" ;;
+    pro-3.1)       echo "Gemini 3.1 Pro (High)" ;;
+    flash-3.6)     echo "Gemini 3.6 Flash (High)" ;;
+    flash-3.6-med) echo "Gemini 3.6 Flash (Medium)" ;;
+    flash-3.6-lo)  echo "Gemini 3.6 Flash (Low)" ;;
     *) die "unknown tier '$1'" ;;
   esac
 }

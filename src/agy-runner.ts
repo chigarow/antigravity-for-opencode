@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 
-export type Tier = "flash-3.5" | "flash-3.5-lo" | "pro-3.1" | "flash-3.6" | "flash-3.6-lo";
+export type Tier = "flash-3.5" | "flash-3.5-lo" | "pro-3.1" | "flash-3.6" | "flash-3.6-med" | "flash-3.6-lo";
 
 export interface AgyOptions {
   prompt: string;
@@ -51,6 +51,7 @@ const TIER_MODEL: Record<Tier, string> = {
   "flash-3.5-lo": "Gemini 3.5 Flash (Low)",
   "pro-3.1": "Gemini 3.1 Pro (High)",
   "flash-3.6": "Gemini 3.6 Flash (High)",
+  "flash-3.6-med": "Gemini 3.6 Flash (Medium)",
   "flash-3.6-lo": "Gemini 3.6 Flash (Low)",
 };
 
@@ -67,7 +68,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  *
  * Tier-aware default when no explicit timeout is provided:
  *  - tier === "pro-3.1"   → "15m"  (heavier work, longer default)
- *  - any other tier       → "10m"  (flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-lo, or unspecified)
+ *  - any other tier       → "10m"  (flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, flash-3.6-lo, or unspecified)
  *
  * Accepts:
  *  - undefined / null            → tier-aware default
@@ -88,7 +89,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  * classification, not as INVALID_TIMEOUT, so user-facing surface stays
  * stable.
  */
-function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.5"): string {
+function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.6-med"): string {
   if (t == null) return tier === "pro-3.1" ? "15m" : "10m";
 
   // Validate + coerce. The cap is applied uniformly to whatever this
@@ -307,7 +308,7 @@ export function parseConversationIdFromLog(log: string): string | undefined {
 }
 
 export function buildAgyArgs(opts: AgyOptions): string[] {
-  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.5"];
+  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.6-med"];
   if (!model) {
     throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
   }
@@ -445,7 +446,7 @@ export async function runAgy(
     const trimmed = out.trim();
     if (!trimmed) {
       throw new AgyError("agy returned empty output", "EMPTY_OUTPUT", {
-        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.5"],
+        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.6-med"],
         ...timeoutField,
         durationMs,
         ...convIdField(convId),

@@ -45,17 +45,17 @@ function createFakeProc({
 }
 
 describe("buildAgyArgs", () => {
-  test("defaults to flash-3.5 tier and 10m timeout", () => {
+  test("defaults to flash-3.6-med tier and 10m timeout", () => {
     const args = buildAgyArgs({ prompt: "do something" });
     expect(args).toContain("--model");
-    expect(args).toContain("Gemini 3.5 Flash (High)");
+    expect(args).toContain("Gemini 3.6 Flash (Medium)");
     expect(args).toContain("--print-timeout");
     expect(args).toContain("10m");
     expect(args).toContain("-p");
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps all five versioned tiers correctly", () => {
+  test("maps all six versioned tiers correctly", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5" })).toContain(
       "Gemini 3.5 Flash (High)"
     );
@@ -67,6 +67,9 @@ describe("buildAgyArgs", () => {
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6" })).toContain(
       "Gemini 3.6 Flash (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" })).toContain(
+      "Gemini 3.6 Flash (Medium)"
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" })).toContain(
       "Gemini 3.6 Flash (Low)"
@@ -175,6 +178,25 @@ describe("buildAgyArgs", () => {
     expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
     expect(loArgs).not.toContain("Gemini 3.6 Flash (High)");
     expect(hiArgs).not.toContain("Gemini 3.6 Flash (Low)");
+  });
+
+  test("flash-3.6-med maps to Gemini 3.6 Flash (Medium) and defaults timeout to 10m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" });
+    expect(args).toContain("Gemini 3.6 Flash (Medium)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.6-med is distinct from flash-3.6 and flash-3.6-lo", () => {
+    const medArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
+    expect(medArgs).toContain("Gemini 3.6 Flash (Medium)");
+    expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
+    expect(loArgs).toContain("Gemini 3.6 Flash (Low)");
+    expect(medArgs).not.toContain("Gemini 3.6 Flash (High)");
+    expect(medArgs).not.toContain("Gemini 3.6 Flash (Low)");
+    expect(hiArgs).not.toContain("Gemini 3.6 Flash (Medium)");
+    expect(loArgs).not.toContain("Gemini 3.6 Flash (Medium)");
   });
 
   test("flash-3.5-lo defaults timeout to 10m", () => {
@@ -693,7 +715,7 @@ describe("runAgy (injected spawn)", () => {
       // Pure exit-code branch — nothing on stderr.
       expect(e.code).toBe("TIMEOUT");
       expect(e.details?.exitCode).toBe(124);
-      // 10m default (flash-3.5 tier, no explicit timeout).
+      // 10m default (flash-3.6-med tier, no explicit timeout).
       expect(e.details?.timeout).toBe("10m");
       expect(typeof e.details?.durationMs).toBe("number");
       expect(e.details.durationMs).toBeGreaterThanOrEqual(7 * 60 * 1000 - 1000);

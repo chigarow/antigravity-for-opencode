@@ -58,14 +58,14 @@ describe("header / stdout separator (Wave 5.5 regression)", () => {
 });
 
 describe("buildAgyToolResult tier reporting", () => {
-  test("no tier defaults to flash-3.5 in header, title, and metadata", () => {
+  test("no tier defaults to flash-3.6-med in header, title, and metadata", () => {
     // Given: buildAgyToolResult called without an explicit tier
     const result = buildAgyToolResult({ prompt: "x" }, fakeResult);
 
-    // Then: all three surfaces report flash-3.5 (not the old bare "flash")
-    expect(result.output).toContain("tier: flash-3.5");
-    expect(result.title).toBe("agy (flash-3.5)");
-    expect(result.metadata?.tier).toBe("flash-3.5");
+    // Then: all three surfaces report flash-3.6-med (new default)
+    expect(result.output).toContain("tier: flash-3.6-med");
+    expect(result.title).toBe("agy (flash-3.6-med)");
+    expect(result.metadata?.tier).toBe("flash-3.6-med");
   });
 
   test("explicit tier flash-3.6 propagates to header, title, and metadata", () => {

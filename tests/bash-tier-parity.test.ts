@@ -28,6 +28,10 @@ const EXPECTED_TIERS = [
     display: "Gemini 3.6 Flash (High)",
   },
   {
+    slug: "flash-3.6-med",
+    display: "Gemini 3.6 Flash (Medium)",
+  },
+  {
     slug: "flash-3.6-lo",
     display: "Gemini 3.6 Flash (Low)",
   },
@@ -44,13 +48,13 @@ function readScript(): string {
 }
 
 describe("bash tier parity (scripts/agy-delegate.sh)", () => {
-  test("default TIER is flash-3.5", () => {
+  test("default TIER is flash-3.6-med", () => {
     // Given: the standalone delegate script source
     const source = readScript();
 
     // When: we inspect the default TIER assignment
-    // Then: default is the versioned flash-3.5 slug (not bare flash)
-    expect(source).toContain('TIER="flash-3.5"');
+    // Then: default is the versioned flash-3.6-med slug
+    expect(source).toContain('TIER="flash-3.6-med"');
   });
 
   test("model_for_tier case arms map each versioned slug to its display name", () => {
@@ -64,20 +68,20 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
   });
 
-  test("usage help lists the five versioned tiers", () => {
+  test("usage help lists the six versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all five tier slugs
+    // When / Then: help documents all six tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
     // Tier option line should list them (not the legacy bare trio alone)
     expect(source).toMatch(
-      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*pro-3\.1[^>]*flash-3\.6[^>]*flash-3\.6-lo[^>]*>/,
+      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*pro-3\.1[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*>/,
     );
     // --timeout help line should list all non-pro tiers that default to 10m
-    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.6.*flash-3\.6-lo/);
+    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo/);
   });
 
   test("unknown-tier die path is still present", () => {
@@ -96,5 +100,22 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(source).not.toMatch(soleCaseArm("flash"));
     expect(source).not.toMatch(soleCaseArm("flash-lo"));
     expect(source).not.toMatch(soleCaseArm("pro"));
+  });
+
+  test("bash -n accepts scripts/agy-delegate.sh (model_for_tier case is closed)", async () => {
+    // Given: the standalone delegate script on disk
+    // When: the real bash parser validates it with bash -n
+    const proc = Bun.spawn(["bash", "-n", SCRIPT_PATH], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stderr, exitCode] = await Promise.all([
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    // Then: zero exit status — missing esac / other syntax errors must fail this test
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe("");
   });
 });
