@@ -80,4 +80,24 @@ describe("buildAgyToolResult tier reporting", () => {
     expect(result.title).toBe("agy (flash-3.6)");
     expect(result.metadata?.tier).toBe("flash-3.6");
   });
+
+  test("explicit tier flash-3.5-med propagates to header, title, and metadata", () => {
+    const result = buildAgyToolResult(
+      { prompt: "x", tier: "flash-3.5-med" },
+      fakeResult
+    );
+    expect(result.output).toContain("tier: flash-3.5-med");
+    expect(result.title).toBe("agy (flash-3.5-med)");
+    expect(result.metadata?.tier).toBe("flash-3.5-med");
+  });
+
+  test("explicit tier pro-3.1-lo propagates to header, title, and metadata", () => {
+    const result = buildAgyToolResult(
+      { prompt: "x", tier: "pro-3.1-lo" },
+      fakeResult
+    );
+    expect(result.output).toContain("tier: pro-3.1-lo");
+    expect(result.title).toBe("agy (pro-3.1-lo)");
+    expect(result.metadata?.tier).toBe("pro-3.1-lo");
+  });
 });

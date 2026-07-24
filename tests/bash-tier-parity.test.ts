@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, chmodSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 /**
  * File-content parity checks for scripts/agy-delegate.sh tier slugs.
@@ -20,8 +21,16 @@ const EXPECTED_TIERS = [
     display: "Gemini 3.5 Flash (Low)",
   },
   {
+    slug: "flash-3.5-med",
+    display: "Gemini 3.5 Flash (Medium)",
+  },
+  {
     slug: "pro-3.1",
     display: "Gemini 3.1 Pro (High)",
+  },
+  {
+    slug: "pro-3.1-lo",
+    display: "Gemini 3.1 Pro (Low)",
   },
   {
     slug: "flash-3.6",
@@ -68,20 +77,62 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
   });
 
-  test("usage help lists the six versioned tiers", () => {
+  test("usage help lists the eight versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all six tier slugs
+    // When / Then: help documents all eight tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
     // Tier option line should list them (not the legacy bare trio alone)
     expect(source).toMatch(
-      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*pro-3\.1[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*>/,
+      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*flash-3\.5-med[^>]*pro-3\.1[^>]*pro-3\.1-lo[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*>/,
     );
-    // --timeout help line should list all non-pro tiers that default to 10m
-    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo/);
+    // --timeout help line should list all flash-family tiers that default to 10m
+    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.5-med.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo/);
+    // --timeout help should list pro family (15m default)
+    expect(source).toMatch(/pro-3\.1.*pro-3\.1-lo/);
+  });
+
+  test("tier-aware default timeout: pro family → 15m, flash family → 10m, explicit --timeout wins", async () => {
+    // Given: a fake `agy` on a private PATH that captures every arg it receives
+    const tmp = mkdtempSync(join(tmpdir(), "agy-bash-"));
+    const captureFile = join(tmp, "args.txt");
+    const fakeAgy = join(tmp, "agy");
+    writeFileSync(
+      fakeAgy,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${captureFile}"\necho "fake agy output"\n`,
+    );
+    chmodSync(fakeAgy, 0o755);
+
+    const script = join(import.meta.dir, "..", "scripts", "agy-delegate.sh");
+
+    async function timeoutForTier(tier: string, extra: string[] = []): Promise<string | undefined> {
+      // reset capture
+      try { unlinkSync(captureFile); } catch {}
+      const args = ["bash", script, "--tier", tier, ...extra, "task"];
+      const proc = Bun.spawn(args, {
+        env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await proc.exited;
+      const lines = readFileSync(captureFile, "utf8").split("\n");
+      const idx = lines.indexOf("--print-timeout");
+      return idx >= 0 ? lines[idx + 1] : undefined;
+    }
+
+    // pro-3.1-lo defaults to 15m (Pro family)
+    expect(await timeoutForTier("pro-3.1-lo")).toBe("15m");
+    // pro-3.1 also defaults to 15m (verifying the bash timeout fix for existing tier)
+    expect(await timeoutForTier("pro-3.1")).toBe("15m");
+    // flash-3.5-med defaults to 10m (Flash family)
+    expect(await timeoutForTier("flash-3.5-med")).toBe("10m");
+    // flash-3.6-med (default tier) also 10m
+    expect(await timeoutForTier("flash-3.6-med")).toBe("10m");
+    // explicit --timeout always wins, even for Pro family
+    expect(await timeoutForTier("pro-3.1-lo", ["--timeout", "5m"])).toBe("5m");
   });
 
   test("unknown-tier die path is still present", () => {

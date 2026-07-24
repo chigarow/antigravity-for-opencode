@@ -2,8 +2,8 @@
 #
 # agy-delegate.sh — standalone wrapper around the Antigravity CLI (`agy`).
 # Matches the behavior of the opencode-agy plugin, with the same review and safety caveats.
-# Supports versioned tiers: flash-3.5, flash-3.5-lo, pro-3.1, flash-3.6, flash-3.6-med (default), and flash-3.6-lo.
-# Timeout defaults are 10m for flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, and flash-3.6-lo; pro-3.1 uses 15m.
+# Supports versioned tiers: flash-3.5, flash-3.5-lo, flash-3.5-med, pro-3.1, pro-3.1-lo, flash-3.6, flash-3.6-med (default), and flash-3.6-lo.
+# Timeout defaults are 10m for flash-3.5, flash-3.5-lo, flash-3.5-med, flash-3.6, flash-3.6-med, and flash-3.6-lo; pro-3.1 and pro-3.1-lo use 15m.
 #
 # Usage examples:
 #   ./scripts/agy-delegate.sh --project . "implement the feature"
@@ -13,7 +13,8 @@
 set -euo pipefail
 
 TIER="flash-3.6-med"
-TIMEOUT="10m"  # flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, and flash-3.6-lo default to 10m; pro-3.1 defaults to 15m; hard cap is 4h — see normalizeTimeout in src/agy-runner.ts
+TIMEOUT=""           # filled from --timeout or tier-aware default below
+EXPLICIT_TIMEOUT=0   # tracks whether --timeout was explicitly supplied
 DIR=""
 PROJECT=""
 YOLO=0
@@ -32,11 +33,11 @@ Usage: agy-delegate.sh [options] "prompt"
        echo "prompt" | agy-delegate.sh -
 
 Options:
-  -t, --tier <flash-3.5|flash-3.5-lo|pro-3.1|flash-3.6|flash-3.6-med|flash-3.6-lo>
+  -t, --tier <flash-3.5|flash-3.5-lo|flash-3.5-med|pro-3.1|pro-3.1-lo|flash-3.6|flash-3.6-med|flash-3.6-lo>
                                       Tier (default: flash-3.6-med)
   -d, --dir <path>                  Add workspace dir
       --project <path>              Wrapper alias for agy's project selection; forwarded to upstream agy
-      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.5, flash-3.5-lo, flash-3.6, flash-3.6-med, and flash-3.6-lo; 15m for pro-3.1; hard cap 4h)
+      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.5, flash-3.5-lo, flash-3.5-med, flash-3.6, flash-3.6-med, and flash-3.6-lo; 15m for pro-3.1 and pro-3.1-lo; hard cap 4h)
       --yolo                        --dangerously-skip-permissions; use only for deliberate reviewed branch or worktree work
       --sandbox                     Run with terminal restrictions; safer, but may block merge or filesystem-heavy work
   -c, --continue                    Resume most recent agy conversation
@@ -51,7 +52,9 @@ model_for_tier() {
   case "$1" in
     flash-3.5)     echo "Gemini 3.5 Flash (High)" ;;
     flash-3.5-lo)  echo "Gemini 3.5 Flash (Low)" ;;
+    flash-3.5-med) echo "Gemini 3.5 Flash (Medium)" ;;
     pro-3.1)       echo "Gemini 3.1 Pro (High)" ;;
+    pro-3.1-lo)    echo "Gemini 3.1 Pro (Low)" ;;
     flash-3.6)     echo "Gemini 3.6 Flash (High)" ;;
     flash-3.6-med) echo "Gemini 3.6 Flash (Medium)" ;;
     flash-3.6-lo)  echo "Gemini 3.6 Flash (Low)" ;;
@@ -64,7 +67,7 @@ while [ $# -gt 0 ]; do
     -t|--tier)       need "$#" "$1"; TIER="$2"; shift 2 ;;
     -d|--dir)        need "$#" "$1"; DIR="$2"; shift 2 ;;
     --project)      need "$#" "$1"; PROJECT="$2"; shift 2 ;;
-    --timeout)       need "$#" "$1"; TIMEOUT="$2"; shift 2 ;;
+    --timeout)       need "$#" "$1"; TIMEOUT="$2"; EXPLICIT_TIMEOUT=1; shift 2 ;;
     --yolo)          YOLO=1; shift ;;
     --sandbox)       SANDBOX=1; shift ;;
     -c|--continue)   CONTINUE=1; shift ;;
@@ -80,6 +83,15 @@ done
 
 [ -n "$PROMPT" ] || die "no prompt"
 command -v agy >/dev/null 2>&1 || die "agy not found on PATH"
+
+# Tier-aware default timeout: Pro family (pro-3.1, pro-3.1-lo) → 15m; all Flash tiers → 10m.
+# An explicit --timeout always wins over the tier default.
+if [ "$EXPLICIT_TIMEOUT" -eq 0 ]; then
+  case "$TIER" in
+    pro-3.1|pro-3.1-lo) TIMEOUT="15m" ;;
+    *)                  TIMEOUT="10m" ;;
+  esac
+fi
 
 if [ -z "$MODEL" ]; then
   MODEL="$(model_for_tier "$TIER")"
