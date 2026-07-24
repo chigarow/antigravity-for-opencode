@@ -113,7 +113,7 @@ If you also want to type `/agy your task` directly in the TUI (like the Claude C
 ## Tool arguments
 
 - `prompt` (string, required) — The task to send to agy/Gemini.
-- `tier` ("flash-3.5" | "flash-3.5-lo" | "pro-3.1" | "flash-3.6" | "flash-3.6-med" | "flash-3.6-lo", optional) — Default: "flash-3.6-med". `flash-3.6-med` is Gemini 3.6 Flash Medium (the new default), `flash-3.5-lo` is the low-cost option, `flash-3.6` is the new flash workhorse option, and `flash-3.6-lo` is the cheapest 3.6 option.
+- `tier` ("flash-3.5" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1" | "pro-3.1-lo" | "flash-3.6" | "flash-3.6-med" | "flash-3.6-lo", optional) — Default: "flash-3.6-med". `flash-3.6-med` is Gemini 3.6 Flash Medium (the new default), `flash-3.5-lo` is the low-cost option, `flash-3.6` is the new flash workhorse option, and `flash-3.6-lo` is the cheapest 3.6 option.
 
 Tier names changed in this breaking release. The old names are unsupported and have no aliases.
 
@@ -125,9 +125,11 @@ Tier names changed in this breaking release. The old names are unsupported and h
 | NEW | `flash-3.6` | Gemini 3.6 Flash (High) |
 | NEW | `flash-3.6-med` | Gemini 3.6 Flash (Medium) |
 | NEW | `flash-3.6-lo` | Gemini 3.6 Flash (Low) |
+| NEW | `flash-3.5-med` | Gemini 3.5 Flash (Medium) |
+| NEW | `pro-3.1-lo` | Gemini 3.1 Pro (Low) |
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
 - `project` (string, optional) — Project name passed to agy (`--project <value>`). Useful for scoping agy's work to a specific Google Cloud project.
-- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier. `pro-3.1` defaults to `15m`; `flash-3.5`, `flash-3.5-lo`, `flash-3.6`, `flash-3.6-med`, and `flash-3.6-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
+- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier. `pro-3.1` and `pro-3.1-lo` default to `15m`; `flash-3.5`, `flash-3.5-lo`, `flash-3.5-med`, `flash-3.6`, `flash-3.6-med`, and `flash-3.6-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
 - `yolo` (boolean, optional) — Auto-approve all permissions inside agy. Only use with a reviewed diff, a throwaway branch or worktree, and `sandbox: true` when the task does not need direct filesystem or shell access.
 - `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`). Helpful for safer execution, but it can block merge or filesystem heavy work.
 - `continue` (boolean, optional) — Resume the most recent agy conversation. Mutually exclusive with `conversation`.
@@ -136,7 +138,7 @@ Tier names changed in this breaking release. The old names are unsupported and h
 
 ### Handling long-running work
 
-A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash-3.5`, `flash-3.5-lo`, `flash-3.6`, `flash-3.6-med`, and `flash-3.6-lo`, and `15m` for `pro-3.1`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
+A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash-3.5`, `flash-3.5-lo`, `flash-3.5-med`, `flash-3.6`, `flash-3.6-med`, and `flash-3.6-lo`, and `15m` for `pro-3.1` and `pro-3.1-lo`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
 
 - For **git merges with conflicts**, **heavy refactors**, and **large test generation**: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. Use `sandbox: true` only when the task does not need full shell or filesystem access. If you need to auto-approve permissions, `yolo: true` is a deliberate escalation, not a default. 
 - If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` or `conversation: <id>` and a higher `timeout`.
