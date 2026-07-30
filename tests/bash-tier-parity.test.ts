@@ -13,7 +13,7 @@ const SCRIPT_PATH = join(import.meta.dir, "..", "scripts", "agy-delegate.sh");
 
 const EXPECTED_TIERS = [
   {
-    slug: "flash-3.5",
+    slug: "flash-3.5-hi",
     display: "Gemini 3.5 Flash (High)",
   },
   {
@@ -25,7 +25,7 @@ const EXPECTED_TIERS = [
     display: "Gemini 3.5 Flash (Medium)",
   },
   {
-    slug: "pro-3.1",
+    slug: "pro-3.1-hi",
     display: "Gemini 3.1 Pro (High)",
   },
   {
@@ -33,7 +33,7 @@ const EXPECTED_TIERS = [
     display: "Gemini 3.1 Pro (Low)",
   },
   {
-    slug: "flash-3.6",
+    slug: "flash-3.6-hi",
     display: "Gemini 3.6 Flash (High)",
   },
   {
@@ -125,8 +125,8 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
 
     // pro-3.1-lo defaults to 15m (Pro family)
     expect(await timeoutForTier("pro-3.1-lo")).toBe("15m");
-    // pro-3.1 also defaults to 15m (verifying the bash timeout fix for existing tier)
-    expect(await timeoutForTier("pro-3.1")).toBe("15m");
+    // pro-3.1-hi also defaults to 15m (verifying the bash timeout fix for existing tier)
+    expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
     // flash-3.5-med defaults to 10m (Flash family)
     expect(await timeoutForTier("flash-3.5-med")).toBe("10m");
     // flash-3.6-med (default tier) also 10m
@@ -169,4 +169,69 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(exitCode).toBe(0);
     expect(stderr).toBe("");
   });
+
+  test("usage help tier list is exactly the eight v0.8.0 tiers", () => {
+    // Given: usage() --tier option line
+    const source = readScript();
+    const m = source.match(/--tier\s+<([^>]+)>/);
+    expect(m).not.toBeNull();
+    const listed = new Set(
+      m![1]
+        .split("|")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+    const expected = new Set(EXPECTED_TIERS.map((t) => t.slug));
+    expect(listed).toEqual(expected);
+  });
+
+  test("process rejects removed unsuffixed High tiers with unknown tier", async () => {
+    // Given: fake agy on PATH so model_for_tier runs
+    const tmp = mkdtempSync(join(tmpdir(), "agy-bash-reject-"));
+    const fakeAgy = join(tmp, "agy");
+    writeFileSync(fakeAgy, `#!/usr/bin/env bash\necho fake\n`);
+    chmodSync(fakeAgy, 0o755);
+    const script = SCRIPT_PATH;
+    const removed = ["flash-3.5", "pro-3.1", "flash-3.6", "flash", "flash-lo", "pro"];
+    for (const tier of removed) {
+      const proc = Bun.spawn(["bash", script, "--tier", tier, "task"], {
+        env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [stderr, exitCode] = await Promise.all([
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toMatch(/unknown tier/i);
+    }
+  });
+
+  test("all Flash tiers default to 10m including High -hi", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "agy-bash-flash-to-"));
+    const captureFile = join(tmp, "args.txt");
+    const fakeAgy = join(tmp, "agy");
+    writeFileSync(
+      fakeAgy,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${captureFile}"\necho "fake agy output"\n`,
+    );
+    chmodSync(fakeAgy, 0o755);
+    async function timeoutForTier(tier: string): Promise<string | undefined> {
+      try { unlinkSync(captureFile); } catch {}
+      const proc = Bun.spawn(["bash", SCRIPT_PATH, "--tier", tier, "task"], {
+        env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      await proc.exited;
+      const lines = readFileSync(captureFile, "utf8").split("\n");
+      const idx = lines.indexOf("--print-timeout");
+      return idx >= 0 ? lines[idx + 1] : undefined;
+    }
+    expect(await timeoutForTier("flash-3.5-hi")).toBe("10m");
+    expect(await timeoutForTier("flash-3.6-hi")).toBe("10m");
+    expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
+  });
+
 });

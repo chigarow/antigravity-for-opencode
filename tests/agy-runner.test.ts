@@ -56,7 +56,7 @@ describe("buildAgyArgs", () => {
   });
 
   test("maps all eight versioned tiers correctly", () => {
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5" })).toContain(
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5-hi" })).toContain(
       "Gemini 3.5 Flash (High)"
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5-lo" })).toContain(
@@ -65,13 +65,13 @@ describe("buildAgyArgs", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5-med" })).toContain(
       "Gemini 3.5 Flash (Medium)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "pro-3.1" })).toContain(
+    expect(buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi" })).toContain(
       "Gemini 3.1 Pro (High)"
     );
     expect(buildAgyArgs({ prompt: "x", tier: "pro-3.1-lo" })).toContain(
       "Gemini 3.1 Pro (Low)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6" })).toContain(
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" })).toContain(
       "Gemini 3.6 Flash (High)"
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" })).toContain(
@@ -152,21 +152,21 @@ describe("buildAgyArgs", () => {
 
   // ---- tier-aware defaults + 4h cap ----
 
-  test("pro-3.1 tier with no explicit timeout defaults to 15m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1" });
+  test("pro-3.1-hi tier with no explicit timeout defaults to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi" });
     expect(args).toContain("15m");
   });
 
-  test("pro-3.1 tier with explicit timeout uses the explicit value, not the tier default", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1", timeout: "5m" });
+  test("pro-3.1-hi tier with explicit timeout uses the explicit value, not the tier default", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi", timeout: "5m" });
     expect(args).toContain("5m");
     expect(args).not.toContain("15m");
   });
 
-  // ---- flash-3.6 + timeout matrix + model override (TDD RED) ----
+  // ---- flash-3.6-hi + timeout matrix + model override (TDD RED) ----
 
-  test("flash-3.6 maps to Gemini 3.6 Flash (High) and defaults timeout to 10m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
+  test("flash-3.6-hi maps to Gemini 3.6 Flash (High) and defaults timeout to 10m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" });
     expect(args).toContain("Gemini 3.6 Flash (High)");
     expect(args).toContain("10m");
   });
@@ -177,9 +177,9 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("10m");
   });
 
-  test("flash-3.6-lo is distinct from flash-3.6 (different model strings)", () => {
+  test("flash-3.6-lo is distinct from flash-3.6-hi (different model strings)", () => {
     const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" });
     expect(loArgs).toContain("Gemini 3.6 Flash (Low)");
     expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
     expect(loArgs).not.toContain("Gemini 3.6 Flash (High)");
@@ -192,9 +192,9 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("10m");
   });
 
-  test("flash-3.6-med is distinct from flash-3.6 and flash-3.6-lo", () => {
+  test("flash-3.6-med is distinct from flash-3.6-hi and flash-3.6-lo", () => {
     const medArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" });
     const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
     expect(medArgs).toContain("Gemini 3.6 Flash (Medium)");
     expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
@@ -211,8 +211,8 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("10m");
   });
 
-  test("flash-3.5 defaults timeout to 10m when tier is explicit", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.5" });
+  test("flash-3.5-hi defaults timeout to 10m when tier is explicit", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.5-hi" });
     expect(args).toContain("Gemini 3.5 Flash (High)");
     expect(args).toContain("10m");
   });
@@ -231,9 +231,9 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("15m");
   });
 
-  test("flash-3.5-med is distinct from flash-3.5 and flash-3.5-lo", () => {
+  test("flash-3.5-med is distinct from flash-3.5-hi and flash-3.5-lo", () => {
     const medArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.5-med" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.5" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.5-hi" });
     const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.5-lo" });
     expect(medArgs).toContain("Gemini 3.5 Flash (Medium)");
     expect(hiArgs).toContain("Gemini 3.5 Flash (High)");
@@ -244,9 +244,9 @@ describe("buildAgyArgs", () => {
     expect(loArgs).not.toContain("Gemini 3.5 Flash (Medium)");
   });
 
-  test("pro-3.1-lo is distinct from pro-3.1", () => {
+  test("pro-3.1-lo is distinct from pro-3.1-hi", () => {
     const loArgs = buildAgyArgs({ prompt: "x", tier: "pro-3.1-lo" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "pro-3.1" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi" });
     expect(loArgs).toContain("Gemini 3.1 Pro (Low)");
     expect(hiArgs).toContain("Gemini 3.1 Pro (High)");
     expect(loArgs).not.toContain("Gemini 3.1 Pro (High)");
@@ -272,7 +272,7 @@ describe("buildAgyArgs", () => {
   test("model override wins when both model and tier are set", () => {
     const args = buildAgyArgs({
       prompt: "x",
-      tier: "flash-3.5",
+      tier: "flash-3.5-hi",
       model: "Custom Override Model",
     });
     expect(args).toContain("Custom Override Model");

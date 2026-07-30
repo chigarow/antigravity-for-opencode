@@ -16,7 +16,7 @@ describe("real agy integration (headless)", () => {
     try {
       const result = await runAgy({
         prompt: "Reply with exactly the word: INTEGRATION_OK and nothing else.",
-        tier: "flash-3.5",
+        tier: "flash-3.5-hi",
         timeout: "25s",
       });
 
