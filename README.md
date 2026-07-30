@@ -113,23 +113,11 @@ If you also want to type `/agy your task` directly in the TUI (like the Claude C
 ## Tool arguments
 
 - `prompt` (string, required) — The task to send to agy/Gemini.
-- `tier` ("flash-3.5" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1" | "pro-3.1-lo" | "flash-3.6" | "flash-3.6-med" | "flash-3.6-lo", optional) — Default: "flash-3.6-med". `flash-3.6-med` is Gemini 3.6 Flash Medium (the new default), `flash-3.5-lo` is the low-cost option, `flash-3.6` is the new flash workhorse option, and `flash-3.6-lo` is the cheapest 3.6 option.
+- `tier` ("flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo", optional) — Default: "flash-3.6-med". See [Available model tiers](#available-model-tiers) for details.
 
-Tier names changed in this breaking release. The old names are unsupported and have no aliases.
-
-| Old name | New tier | Display name |
-| --- | --- | --- |
-| `flash` | `flash-3.5` | Gemini 3.5 Flash (High) |
-| `flash-lo` | `flash-3.5-lo` | Gemini 3.5 Flash (Low) |
-| `pro` | `pro-3.1` | Gemini 3.1 Pro (High) |
-| NEW | `flash-3.6` | Gemini 3.6 Flash (High) |
-| NEW | `flash-3.6-med` | Gemini 3.6 Flash (Medium) |
-| NEW | `flash-3.6-lo` | Gemini 3.6 Flash (Low) |
-| NEW | `flash-3.5-med` | Gemini 3.5 Flash (Medium) |
-| NEW | `pro-3.1-lo` | Gemini 3.1 Pro (Low) |
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
 - `project` (string, optional) — Project name passed to agy (`--project <value>`). Useful for scoping agy's work to a specific Google Cloud project.
-- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier. `pro-3.1` and `pro-3.1-lo` default to `15m`; `flash-3.5`, `flash-3.5-lo`, `flash-3.5-med`, `flash-3.6`, `flash-3.6-med`, and `flash-3.6-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
+- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier. `pro-3.1-hi` and `pro-3.1-lo` default to `15m`; `flash-3.5-hi`, `flash-3.5-lo`, `flash-3.5-med`, `flash-3.6-hi`, `flash-3.6-med`, and `flash-3.6-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
 - `yolo` (boolean, optional) — Auto-approve all permissions inside agy. Only use with a reviewed diff, a throwaway branch or worktree, and `sandbox: true` when the task does not need direct filesystem or shell access.
 - `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`). Helpful for safer execution, but it can block merge or filesystem heavy work.
 - `continue` (boolean, optional) — Resume the most recent agy conversation. Mutually exclusive with `conversation`.
@@ -138,7 +126,7 @@ Tier names changed in this breaking release. The old names are unsupported and h
 
 ### Handling long-running work
 
-A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash-3.5`, `flash-3.5-lo`, `flash-3.5-med`, `flash-3.6`, `flash-3.6-med`, and `flash-3.6-lo`, and `15m` for `pro-3.1` and `pro-3.1-lo`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
+A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash-3.5-hi`, `flash-3.5-lo`, `flash-3.5-med`, `flash-3.6-hi`, `flash-3.6-med`, and `flash-3.6-lo`, and `15m` for `pro-3.1-hi` and `pro-3.1-lo`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
 
 - For **git merges with conflicts**, **heavy refactors**, and **large test generation**: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. Use `sandbox: true` only when the task does not need full shell or filesystem access. If you need to auto-approve permissions, `yolo: true` is a deliberate escalation, not a default. 
 - If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` or `conversation: <id>` and a higher `timeout`.
@@ -150,7 +138,7 @@ Example for a slow merge:
 ```json
 {
   "prompt": "merge feature/auth into main, resolve conflicts, run the full test suite",
-  "tier": "pro-3.1",
+  "tier": "pro-3.1-hi",
   "timeout": "30m",
   "yolo": true,
   "dir": "/path/to/your/repo"
@@ -172,7 +160,7 @@ The plugin tees agy's log to a private temp file, extracts the conversation ID f
 try {
   await agy({
     prompt: "merge feature/auth into main, resolve conflicts, run the full test suite",
-    tier: "pro-3.1",
+    tier: "pro-3.1-hi",
     timeout: "20m",
     yolo: true,
     dir: "/path/to/your/repo",
@@ -197,6 +185,45 @@ try {
 If you passed `conversation: "<id>"` on the first call, that same ID comes back on the error, so pass it again on retry exactly as received.
 
 See [Tool arguments](#tool-arguments) above for the full list.
+
+## Available model tiers
+
+### Gemini 3.5 Flash
+
+| Tier | Display name | Default timeout |
+| --- | --- | --- |
+| `flash-3.5-lo` | Gemini 3.5 Flash (Low) | 10m |
+| `flash-3.5-med` | Gemini 3.5 Flash (Medium) | 10m |
+| `flash-3.5-hi` | Gemini 3.5 Flash (High) | 10m |
+
+### Gemini 3.1 Pro
+
+| Tier | Display name | Default timeout |
+| --- | --- | --- |
+| `pro-3.1-lo` | Gemini 3.1 Pro (Low) | 15m |
+| `pro-3.1-hi` | Gemini 3.1 Pro (High) | 15m |
+
+### Gemini 3.6 Flash
+
+| Tier | Display name | Default timeout |
+| --- | --- | --- |
+| `flash-3.6-lo` | Gemini 3.6 Flash (Low) | 10m |
+| `flash-3.6-med` | Gemini 3.6 Flash (Medium) — default | 10m |
+| `flash-3.6-hi` | Gemini 3.6 Flash (High) | 10m |
+
+### Breaking migration
+
+The tier names changed in a breaking release. The old names are unsupported and have no aliases.
+
+| Removed name | Use instead |
+| --- | --- |
+| `flash` | `flash-3.5-hi` |
+| `flash-lo` | `flash-3.5-lo` |
+| `pro` | `pro-3.1-hi` |
+| `flash-3.5` | `flash-3.5-hi` |
+| `pro-3.1` | `pro-3.1-hi` |
+| `flash-3.6` | `flash-3.6-hi` |
+
 
 ## Local file analysis
 
@@ -226,8 +253,8 @@ After installing the command file, you can invoke agy directly from the OpenCode
 
 ```
 /agy write a full test suite for src/utils/math.ts
-/agy --tier pro-3.1 --sandbox "scaffold the reports module"
-/agy --tier pro-3.1 --timeout 30m "merge feature/auth into main and resolve conflicts"
+/agy --tier pro-3.1-hi --sandbox "scaffold the reports module"
+/agy --tier pro-3.1-hi --timeout 30m "merge feature/auth into main and resolve conflicts"
 /agy --continue "finish the previous task and add docs"
 /agy --tier flash-3.6-lo --yolo --dir /path/to/dir "summarize report.pdf"
 ```
@@ -245,7 +272,7 @@ Use `sandbox: true` for safer isolation when the task does not need full shell a
 ## Standalone script (for debugging)
 
 ```bash
-./scripts/agy-delegate.sh --tier flash-3.5 "your task here"
+./scripts/agy-delegate.sh --tier flash-3.5-hi "your task here"
 echo "task" | ./scripts/agy-delegate.sh -
 ```
 
