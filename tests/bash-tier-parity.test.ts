@@ -4,9 +4,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 /**
- * File-content parity checks for scripts/agy-delegate.sh tier slugs.
- * Pure text assertions only — never spawns agy.
- * RED until Wave 3 rewrites the bash case arms to versioned tier names.
+ * File-content and process parity checks for scripts/agy-delegate.sh tier slugs.
+ * Process tests use a fake agy on PATH — never the real CLI.
  */
 
 const SCRIPT_PATH = join(import.meta.dir, "..", "scripts", "agy-delegate.sh");
@@ -234,4 +233,76 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
   });
 
+  test("removed High tiers die even when --model is set (no agy invoke)", async () => {
+    // Given: fake agy that writes an invocation marker if ever reached
+    const tmp = mkdtempSync(join(tmpdir(), "agy-bash-model-bypass-"));
+    const marker = join(tmp, "invoked");
+    const fakeAgy = join(tmp, "agy");
+    writeFileSync(
+      fakeAgy,
+      `#!/usr/bin/env bash\ntouch "${marker}"\necho fake\n`,
+    );
+    chmodSync(fakeAgy, 0o755);
+    const removed = ["flash-3.5", "pro-3.1", "flash-3.6"] as const;
+
+    for (const tier of removed) {
+      try { unlinkSync(marker); } catch {}
+      // When: invalid tier is combined with an explicit exact model override
+      const proc = Bun.spawn(
+        ["bash", SCRIPT_PATH, "--tier", tier, "--model", "Custom Model", "task"],
+        {
+          env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [stderr, exitCode] = await Promise.all([
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+
+      // Then: non-zero exit, exact unknown-tier message, agy never ran
+      expect(exitCode).not.toBe(0);
+      expect(stderr).toContain(`unknown tier '${tier}'`);
+      let markerPresent = true;
+      try {
+        readFileSync(marker);
+      } catch {
+        markerPresent = false;
+      }
+      expect(markerPresent).toBe(false);
+    }
+  });
+
+  test("valid tier + custom --model reaches fake agy with exact model", async () => {
+    // Given: fake agy that records args and an invocation marker
+    const tmp = mkdtempSync(join(tmpdir(), "agy-bash-custom-model-"));
+    const marker = join(tmp, "invoked");
+    const captureFile = join(tmp, "args.txt");
+    const fakeAgy = join(tmp, "agy");
+    writeFileSync(
+      fakeAgy,
+      `#!/usr/bin/env bash\ntouch "${marker}"\nprintf '%s\\n' "$@" > "${captureFile}"\necho "fake agy output"\n`,
+    );
+    chmodSync(fakeAgy, 0o755);
+
+    // When: a valid tier is paired with an explicit exact model override
+    const proc = Bun.spawn(
+      ["bash", SCRIPT_PATH, "--tier", "flash-3.6-med", "--model", "Custom Model", "task"],
+      {
+        env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const exitCode = await proc.exited;
+
+    // Then: fake agy ran and the exact model was forwarded unchanged
+    expect(exitCode).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBeDefined();
+    const lines = readFileSync(captureFile, "utf8").split("\n");
+    const modelIdx = lines.indexOf("--model");
+    expect(modelIdx).toBeGreaterThanOrEqual(0);
+    expect(lines[modelIdx + 1]).toBe("Custom Model");
+  });
 });

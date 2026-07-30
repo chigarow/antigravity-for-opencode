@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { runAgy } from "../src/agy-runner";
 
+// Gate: skip unless agy is on PATH AND AGY_INTEGRATION=1
 const hasAgy = await (async () => {
   try {
     const proc = Bun.spawn(["which", "agy"], { stdout: "pipe" });
@@ -11,8 +12,10 @@ const hasAgy = await (async () => {
   }
 })();
 
+const integrationEnabled = hasAgy && process.env.AGY_INTEGRATION === "1";
+
 describe("real agy integration (headless)", () => {
-  test.skipIf(!hasAgy)("simple prompt returns output or times out gracefully", async () => {
+  test.skipIf(!integrationEnabled)("simple prompt returns output or times out gracefully", async () => {
     try {
       const result = await runAgy({
         prompt: "Reply with exactly the word: INTEGRATION_OK and nothing else.",

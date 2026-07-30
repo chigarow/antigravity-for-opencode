@@ -93,8 +93,10 @@ if [ "$EXPLICIT_TIMEOUT" -eq 0 ]; then
   esac
 fi
 
+# Always validate tier via model_for_tier (unknown tier dies). Keep explicit --model if set.
+TIER_MODEL="$(model_for_tier "$TIER")"
 if [ -z "$MODEL" ]; then
-  MODEL="$(model_for_tier "$TIER")"
+  MODEL="$TIER_MODEL"
 fi
 
 ARGS=(--model "$MODEL" --print-timeout "$TIMEOUT")
