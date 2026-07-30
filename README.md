@@ -196,13 +196,6 @@ See [Tool arguments](#tool-arguments) above for the full list.
 | `flash-3.5-med` | Gemini 3.5 Flash (Medium) | 10m |
 | `flash-3.5-hi` | Gemini 3.5 Flash (High) | 10m |
 
-### Gemini 3.1 Pro
-
-| Tier | Display name | Default timeout |
-| --- | --- | --- |
-| `pro-3.1-lo` | Gemini 3.1 Pro (Low) | 15m |
-| `pro-3.1-hi` | Gemini 3.1 Pro (High) | 15m |
-
 ### Gemini 3.6 Flash
 
 | Tier | Display name | Default timeout |
@@ -211,19 +204,12 @@ See [Tool arguments](#tool-arguments) above for the full list.
 | `flash-3.6-med` | Gemini 3.6 Flash (Medium) — default | 10m |
 | `flash-3.6-hi` | Gemini 3.6 Flash (High) | 10m |
 
-### Breaking migration
+### Gemini 3.1 Pro
 
-The tier names changed in a breaking release. The old names are unsupported and have no aliases.
-
-| Removed name | Use instead |
-| --- | --- |
-| `flash` | `flash-3.5-hi` |
-| `flash-lo` | `flash-3.5-lo` |
-| `pro` | `pro-3.1-hi` |
-| `flash-3.5` | `flash-3.5-hi` |
-| `pro-3.1` | `pro-3.1-hi` |
-| `flash-3.6` | `flash-3.6-hi` |
-
+| Tier | Display name | Default timeout |
+| --- | --- | --- |
+| `pro-3.1-lo` | Gemini 3.1 Pro (Low) | 15m |
+| `pro-3.1-hi` | Gemini 3.1 Pro (High) | 15m |
 
 ## Local file analysis
 
