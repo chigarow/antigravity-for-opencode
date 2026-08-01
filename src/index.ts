@@ -1,6 +1,7 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { runAgy, AgyError, type Tier, type AgyResult } from "./agy-runner";
+import { createAgyCommand, isCommandDef } from "./agy-command";
 
 /**
  * Arguments accepted by the agy tool and by {@link buildAgyToolResult}.
@@ -24,7 +25,18 @@ export interface AgyToolArgs {
  * Extracted so tests can verify header/metadata/warning logic without
  * spawning real agy or leaking a global module mock.
  */
-export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult) {
+export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefined) {
+  if (!result) {
+    return {
+      title: `agy error (UNDEFINED_RESULT)`,
+      output: [
+        "AGY_UNDEFINED_RESULT",
+        "agy runner returned an undefined result. This usually means the tool was invoked by an incompatible OpenCode version.",
+        "Please report this issue.",
+      ].join("\n"),
+      metadata: { error: true, unexpected: true, code: "UNDEFINED_RESULT" },
+    };
+  }
   const header = [
     `## agy result`,
     `tier: ${args.tier ?? "flash-3.6-med"}`,
@@ -62,7 +74,7 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult) {
  *
  * Design goals:
  * - One tool (`agy`) plus one slash command (`/agy`).
- * - Small surface area and no hooks.
+ * - Small surface area: one config hook, no event or execution hooks.
  * - Failures are returned as text instead of crashing the host process.
  * - The caller is still responsible for reviewing the result.
  * - Supports `--sandbox`, `--continue`, `--conversation`, and exact model override.
@@ -144,7 +156,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
           try {
             const result = await runAgy({
               prompt: args.prompt,
-              tier: args.tier as Tier | undefined,
+              tier: args.tier,
               dir: args.dir,
               project: args.project,
               timeout: args.timeout,
@@ -156,7 +168,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
             });
 
             return buildAgyToolResult(args, result);
-          } catch (err: any) {
+          } catch (err: unknown) {
             // Never let agy failures crash the main opencode process.
             if (err instanceof AgyError) {
               const convId = err.details?.conversationId;
@@ -185,9 +197,10 @@ export const AgyPlugin: Plugin = async (ctx) => {
               };
             }
 
+            const message = err instanceof Error ? err.message : String(err);
             const body = [
               `AGY_UNEXPECTED_ERROR`,
-              String(err?.message ?? err),
+              message,
               "",
               "Bug in opencode-agy plugin or environment. Please report.",
             ].join("\n");
@@ -203,6 +216,16 @@ export const AgyPlugin: Plugin = async (ctx) => {
           }
         },
       }),
+    },
+    config: async (cfg) => {
+      // Preserve a schema-valid existing command; replace anything else.
+      if (isCommandDef(cfg.command?.agy)) {
+        return;
+      }
+      cfg.command = {
+        ...cfg.command,
+        agy: createAgyCommand(),
+      };
     },
   };
 };

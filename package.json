@@ -1,6 +1,6 @@
 {
   "name": "opencode-agy",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "OpenCode plugin for delegating scoped work to the Antigravity CLI (agy / Gemini) in headless mode. Thin wrapper with qualified safety and environment caveats.",
   "type": "module",
   "main": "./dist/index.js",
@@ -49,7 +49,7 @@
     "prepublishOnly": "bun run build:all"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "^1.0.0"
+    "@opencode-ai/plugin": "^1.17.9"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.17.9",

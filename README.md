@@ -18,7 +18,7 @@ It provides two surfaces, modeled after the Claude Code reference:
 
 - **One tool**: `agy` (the agent calls this to delegate)
 - **One slash command**: `/agy` (appears in the TUI command palette — type `/agy` to use it)
-- **Zero hooks** — completely non-intrusive and safe to load alongside oh-my-openagent or any other plugin
+- **One config hook** — registers `/agy` automatically; no event or execution hooks
 - **Safety boundary** — failures such as timeout, quota, auth, crash, empty output, and not found are captured and returned as text. The main OpenCode process stays up, but the result still needs human or agent review.
 - **Thin wrapper** — follows the reference architecture exactly.
 
@@ -35,10 +35,10 @@ It provides two surfaces, modeled after the Claude Code reference:
 
 ## Compatibility
 
-This plugin does not claim perfect compatibility. It is designed to stay small, avoid hooks, and work alongside other plugins, but you should still review changes in a branch or worktree and inspect the diff before trusting a merge or other risky task.
+This plugin does not claim perfect compatibility. It is designed to stay small, with minimal hook surface, and work alongside other plugins, but you should still review changes in a branch or worktree and inspect the diff before trusting a merge or other risky task.
 
 - Tool name `agy` does not exist in oh-my-openagent.
-- No hooks or commands are registered.
+- One config hook registers the `/agy` command; no event or execution hooks are used.
 - No shared config keys or namespaces.
 
 You can usually load both plugins together, but treat that as a practical coexistence note, not a guarantee.
@@ -69,25 +69,22 @@ This will install the latest version available at the time opencode first loads 
 
 Restart opencode. It will automatically download and load the plugin from npm (cached in `~/.cache/opencode/node_modules/`).
 
-That's it. The `agy` tool is now available to the agent.
+Both the `agy` tool and `/agy` slash command are now available. No manual copy steps needed.
 
-### Optional: Get the `/agy` slash command
+### Migrating from a manually copied `/agy` command
 
-The core `agy` tool works immediately after adding the plugin.
+If you previously copied `commands/agy.md` to `~/.config/opencode/commands/`, your already-loaded command file remains authoritative at this plugin's config-hook boundary. This means:
 
-If you also want to type `/agy your task` directly in the TUI (like the Claude Code reference), copy the command definition once:
+- The plugin's `config` hook sees your loaded command and preserves it (it is schema-valid).
+- You may keep it as-is; it will continue to work.
 
-1. Add `"plugin": ["opencode-agy@latest"]` to your config and restart opencode (this downloads the package).
-2. Then run:
+If you want the plugin-default template to take effect (for example, to pick up updated guidelines shipped in future plugin releases), delete the copied file and restart opencode:
 
-   ```bash
-   mkdir -p ~/.config/opencode/commands
-   cp ~/.cache/opencode/node_modules/opencode-agy/commands/agy.md ~/.config/opencode/commands/agy.md
-   ```
+```bash
+rm ~/.config/opencode/commands/agy.md
+```
 
-3. Restart opencode again.
-
-`/agy` will now appear in the command menu.
+The plugin's config hook will then register its bundled default on the next load. This plugin does not automatically delete copied files or claim precedence over later-loaded plugins.
 
 ### From source (development only)
 
@@ -106,9 +103,8 @@ If you also want to type `/agy your task` directly in the TUI (like the Claude C
    "plugin": ["file:///absolute/path/to/antigravity-for-opencode/dist/index.js"]
    ```
 
-3. (Optional) Copy `commands/agy.md` as shown above.
+3. Restart opencode.
 
-4. Restart opencode.
 
 ## Tool arguments
 
@@ -235,7 +231,7 @@ Why this is required:
 Without `yolo: true`, local file analysis in headless mode will hang or return empty. The main agent still owns verification of whatever agy extracts.
 ## Slash command
 
-After installing the command file, you can invoke agy directly from the OpenCode TUI prompt:
+After setup, you can invoke agy directly from the OpenCode TUI prompt:
 
 ```
 /agy write a full test suite for src/utils/math.ts
@@ -273,7 +269,7 @@ bun run build
 Tests include:
 - Full argument building and tier mapping
 - Success and all error paths (quota, auth, timeout, not found, empty, truncation)
-- Plugin shape verification (only the `agy` tool is registered)
+- Plugin shape verification (the `agy` tool and `/agy` command are registered)
 - Real agy integration (gracefully handles slow environments)
 
 ## Philosophy
