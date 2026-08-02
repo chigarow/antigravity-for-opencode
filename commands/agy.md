@@ -13,5 +13,6 @@ Guidelines:
 - Use `continue: true` or `conversation: <id>` to resume previous agy work.
 - After agy returns, you (the main agent) MUST inspect, verify, and if needed fix or iterate on the result.
 - Never assume agy output is perfect — always review diffs, run tests, etc.
+- If task content starts with `/` or follows a leading newline/tab, Agy 1.1.9 may expand it as a slash command or skill; restructure the prompt if you need literal slash-prefixed content.
 
 The `agy` tool is provided by the opencode-agy plugin.

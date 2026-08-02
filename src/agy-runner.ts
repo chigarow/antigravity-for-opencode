@@ -1,8 +1,7 @@
 import { spawn } from "bun";
-import { unlink } from "node:fs/promises";
+import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "os";
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
 
 export type Tier = "flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo";
 
@@ -353,14 +352,15 @@ export async function runAgy(
   const start = Date.now();
   const requestedConvId = opts.conversation?.trim() || undefined;
 
-  // Always tee agy's log to a unique temp file inside a private 0700 subdirectory
-  // under the OS temp dir (via os.tmpdir()). This mitigates symlink races on shared hosts.
-  const logDir = path.join(tmpdir(), "opencode-agy-logs");
-  await mkdir(logDir, { recursive: true, mode: 0o700 });
-  const logFile = path.join(logDir, `agy-conv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.log`);
-  args.push("--log-file", logFile);
-
+  // Always tee agy's log to a unique temp file inside a fresh per-run 0700
+  // directory under the OS temp dir. mkdtemp atomically creates a unique
+  // directory; chmod ensures owner-only access even if the platform default
+  // is more permissive. The entire directory is removed in finally.
+  const logDir = await mkdtemp(path.join(tmpdir(), "opencode-agy-"));
   try {
+    await chmod(logDir, 0o700);
+    const logFile = path.join(logDir, "agy.log");
+    args.push("--log-file", logFile);
     let proc;
     try {
       proc = spawnFn(["agy", ...args], {
@@ -469,9 +469,9 @@ export async function runAgy(
     if (convId) result.conversationId = convId;
     return result;
   } finally {
-    // Best-effort cleanup of the private temp log file (under os.tmpdir()/opencode-agy-logs).
-    // Never let a leftover log break the call or leak on disk.
-    await unlink(logFile).catch(() => {});
+    // Best-effort whole-directory cleanup of the per-run temp directory.
+    // Never let a leftover dir break the call or leak on disk.
+    await rm(logDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

@@ -8,7 +8,8 @@ import {
   type SpawnFn,
 } from "../src/agy-runner";
 import path from "node:path";
-import { statSync } from "node:fs";
+import { statSync, existsSync } from "node:fs";
+import { tmpdir } from "os";
 
 function createFakeProc({
   stdout = "",
@@ -1037,25 +1038,208 @@ describe("parseConversationIdFromLog", () => {
   });
 });
 
-describe("secure log directory (S1)", () => {
-  test("creates log file under os.tmpdir() private 0700 subdir", async () => {
-    let capturedLogPath = "";
-    const fakeSpawn: SpawnFn = ((args: string[]) => {
-      const logIdx = (args as string[]).indexOf("--log-file");
-      if (logIdx >= 0) capturedLogPath = (args as string[])[logIdx + 1];
-      return createFakeProc({ stdout: "ok", stderr: "", exitCode: 0 });
-    }) as any;
+describe("secure per-run temp-log lifecycle (S1)", () => {
+  /**
+   * Type-safe extraction of the --log-file path from spawn args.
+   * Uses bounds checks instead of non-null assertions or casts.
+   */
+  function extractLogFile(args: readonly string[]): string | undefined {
+    const idx = args.indexOf("--log-file");
+    if (idx < 0 || idx + 1 >= args.length) return undefined;
+    return args[idx + 1];
+  }
 
+  test("success: live 0700 dir, stable agy.log, removed after settlement", async () => {
+    // Given: a fake spawn that captures --log-file and stats the parent dir while alive
+    let capturedFile: string | undefined;
+    let liveMode: number | undefined;
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) {
+        capturedFile = lf;
+        liveMode = statSync(path.dirname(lf)).mode & 0o777;
+      }
+      return createFakeProc({ stdout: "ok", stderr: "", exitCode: 0 });
+    };
+
+    // When: runAgy resolves successfully
     await runAgy({ prompt: "x" }, fakeSpawn);
 
-    expect(capturedLogPath).toBeTruthy();
-    const dir = path.dirname(capturedLogPath);
-    // Must be under tmpdir and contain our private subdir name
-    expect(dir).toContain("opencode-agy-logs");
-    // Verify 0700 permissions on the directory
-    const st = statSync(dir);
-    const mode = st.mode & 0o777;
-    expect(mode).toBe(0o700);
+    // Then: parent is under tmpdir with the stable prefix and agy.log filename
+    expect(capturedFile).toBeTruthy();
+    if (capturedFile === undefined) throw new Error("test setup: --log-file not captured");
+    const dir = path.dirname(capturedFile);
+    expect(path.dirname(dir)).toBe(tmpdir());
+    expect(path.basename(dir).startsWith("opencode-agy-")).toBe(true);
+    expect(path.basename(capturedFile)).toBe("agy.log");
+    // And: live mode was exactly 0700
+    expect(liveMode).toBe(0o700);
+    // And: both file and parent directory are absent after settlement
+    expect(existsSync(capturedFile)).toBe(false);
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  test("AGY_FAILED: per-run dir removed after unclassified nonzero failure", async () => {
+    // Given: a spawn with nonzero exit and generic stderr
+    let capturedDir: string | undefined;
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDir = path.dirname(lf);
+      return createFakeProc({ stdout: "", stderr: "unknown error", exitCode: 2 });
+    };
+
+    // When: runAgy rejects with AGY_FAILED
+    try {
+      await runAgy({ prompt: "fail" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e) {
+      if (!(e instanceof AgyError)) throw e;
+      expect(e.code).toBe("AGY_FAILED");
+    }
+
+    // Then: the per-run directory is absent
+    if (capturedDir === undefined) throw new Error("test setup: --log-file not captured");
+    expect(existsSync(capturedDir)).toBe(false);
+  });
+
+  test("EMPTY_OUTPUT: per-run dir removed after empty stdout", async () => {
+    // Given: a spawn with exit 0 but empty stdout
+    let capturedDir: string | undefined;
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDir = path.dirname(lf);
+      return createFakeProc({ stdout: "   \n\n  ", stderr: "", exitCode: 0 });
+    };
+
+    // When: runAgy rejects with EMPTY_OUTPUT
+    try {
+      await runAgy({ prompt: "empty" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e) {
+      if (!(e instanceof AgyError)) throw e;
+      expect(e.code).toBe("EMPTY_OUTPUT");
+    }
+
+    // Then: the per-run directory is absent
+    if (capturedDir === undefined) throw new Error("test setup: --log-file not captured");
+    expect(existsSync(capturedDir)).toBe(false);
+  });
+
+  test("TIMEOUT: per-run dir removed after classified timeout", async () => {
+    // Given: a spawn with timeout-classified stderr (existing fixture)
+    let capturedDir: string | undefined;
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDir = path.dirname(lf);
+      return createFakeProc({ stdout: "", stderr: "Error: print-timeout exceeded for request", exitCode: 1 });
+    };
+
+    // When: runAgy rejects with TIMEOUT
+    try {
+      await runAgy({ prompt: "slow", timeout: "15m" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e) {
+      if (!(e instanceof AgyError)) throw e;
+      expect(e.code).toBe("TIMEOUT");
+    }
+
+    // Then: the per-run directory is absent
+    if (capturedDir === undefined) throw new Error("test setup: --log-file not captured");
+    expect(existsSync(capturedDir)).toBe(false);
+  });
+
+  test("AUTH_REQUIRED: per-run dir removed after classified auth error", async () => {
+    // Given: a spawn with auth-classified stderr (existing fixture)
+    let capturedDir: string | undefined;
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDir = path.dirname(lf);
+      return createFakeProc({ stdout: "", stderr: "Please authenticate with agy first", exitCode: 1 });
+    };
+
+    // When: runAgy rejects with AUTH_REQUIRED
+    try {
+      await runAgy({ prompt: "auth" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e) {
+      if (!(e instanceof AgyError)) throw e;
+      expect(e.code).toBe("AUTH_REQUIRED");
+    }
+
+    // Then: the per-run directory is absent
+    if (capturedDir === undefined) throw new Error("test setup: --log-file not captured");
+    expect(existsSync(capturedDir)).toBe(false);
+  });
+
+  test("QUOTA_EXHAUSTED: per-run dir removed after classified quota error", async () => {
+    // Given: a spawn with quota-classified stderr (existing fixture)
+    let capturedDir: string | undefined;
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDir = path.dirname(lf);
+      return createFakeProc({ stdout: "", stderr: "You have exceeded your quota for this model", exitCode: 1 });
+    };
+
+    // When: runAgy rejects with QUOTA_EXHAUSTED
+    try {
+      await runAgy({ prompt: "quota" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e) {
+      if (!(e instanceof AgyError)) throw e;
+      expect(e.code).toBe("QUOTA_EXHAUSTED");
+    }
+
+    // Then: the per-run directory is absent
+    if (capturedDir === undefined) throw new Error("test setup: --log-file not captured");
+    expect(existsSync(capturedDir)).toBe(false);
+  });
+
+  test("AGY_NOT_FOUND: created dir removed after synchronous spawn ENOENT", async () => {
+    // Given: a spawn that throws synchronously with ENOENT after --log-file was captured
+    let capturedDir: string | undefined;
+    const badSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDir = path.dirname(lf);
+      const err = Object.assign(new Error("spawn agy ENOENT"), { code: "ENOENT" });
+      throw err;
+    };
+
+    // When: runAgy rejects with AGY_NOT_FOUND
+    try {
+      await runAgy({ prompt: "missing" }, badSpawn);
+      throw new Error("expected AgyError");
+    } catch (e) {
+      if (!(e instanceof AgyError)) throw e;
+      expect(e.code).toBe("AGY_NOT_FOUND");
+    }
+
+    // Then: the already-created per-run directory is absent
+    if (capturedDir === undefined) throw new Error("test setup: --log-file not captured");
+    expect(existsSync(capturedDir)).toBe(false);
+  });
+
+  test("concurrency: eight concurrent calls produce eight distinct dirs, all cleaned", async () => {
+    // Given: eight concurrent calls with a spawn that captures each log dir
+    const capturedDirs: string[] = [];
+    const fakeSpawn: SpawnFn = (args) => {
+      const lf = extractLogFile(args);
+      if (lf !== undefined) capturedDirs.push(path.dirname(lf));
+      return createFakeProc({ stdout: "ok", stderr: "", exitCode: 0 });
+    };
+
+    // When: all eight settle successfully
+    await Promise.all(
+      Array.from({ length: 8 }, () => runAgy({ prompt: "concurrent" }, fakeSpawn))
+    );
+
+    // Then: eight distinct parent directories were observed
+    expect(capturedDirs.length).toBe(8);
+    const unique = new Set(capturedDirs);
+    expect(unique.size).toBe(8);
+    // And: none remain on disk
+    for (const dir of unique) {
+      expect(existsSync(dir)).toBe(false);
+    }
   });
 });
 

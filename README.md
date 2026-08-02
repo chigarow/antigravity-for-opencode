@@ -43,6 +43,16 @@ This plugin does not claim perfect compatibility. It is designed to stay small, 
 
 You can usually load both plugins together, but treat that as a practical coexistence note, not a guarantee.
 
+### Agy 1.1.9 compatibility
+
+Observed compatibility is empirical against local Agy 1.1.9 (`agy --version`). All eight exact display-name model values and wrapper-emitted flags were accepted. The following qualified caveats apply:
+
+- In print/headless mode, Agy 1.1.9 can expand slash commands and skills when prompt content begins with `/`.
+- Agy 1.1.9 also recognizes slash commands after a leading newline or tab.
+- Callers needing literal slash-prefixed content at those recognition positions should restructure the prompt; this plugin intentionally does not expose `--disable-slash-commands` yet.
+- Agy 1.1.9's default system-temp write grant is a qualified upstream reliability improvement for headless temp-log writes, not a universal guarantee.
+- Observed compatibility is empirical; users should check their local `agy --version`.
+
 ## Installation
 
 ### The easy way (npm)
@@ -127,7 +137,7 @@ A 5-minute default used to be enough, but real engineering tasks aren't. The cur
 - For **git merges with conflicts**, **heavy refactors**, and **large test generation**: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. Use `sandbox: true` only when the task does not need full shell or filesystem access. If you need to auto-approve permissions, `yolo: true` is a deliberate escalation, not a default. 
 - If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` or `conversation: <id>` and a higher `timeout`.
 - **Hard upper bound: 4h.** Any input that normalizes above `4h` is silently clamped to `4h` before being passed to agy.
-- The plugin also emits `AGY_NOT_FOUND` when the CLI is missing and `INVALID_TIMEOUT` when timeout parsing fails. Secrets are scrubbed from surfaced errors, and the wrapper writes its private temp log under a locked temp directory so conversation recovery can work without leaving a shared log behind.
+- The plugin also emits `AGY_NOT_FOUND` when the CLI is missing and `INVALID_TIMEOUT` when timeout parsing fails. Secrets are scrubbed from surfaced errors, and the wrapper writes its private temp log to a fresh owner-only `0700` directory per invocation under `os.tmpdir()`, removing the entire directory on every exit path so conversation recovery works without leaving a shared log behind.
 - Plain numbers work too: `timeout: 1800000` is the same as `timeout: "30m"`. Useful when the timeout is computed.
 Example for a slow merge:
 
