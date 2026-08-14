@@ -93,7 +93,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  * classification, not as INVALID_TIMEOUT, so user-facing surface stays
  * stable.
  */
-function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.6-med"): string {
+function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.7-med"): string {
   if (t == null) return tier === "pro-3.1-hi" || tier === "pro-3.1-lo" ? "15m" : "10m";
 
   // Validate + coerce. The cap is applied uniformly to whatever this
@@ -317,7 +317,7 @@ export function buildAgyArgs(opts: AgyOptions): string[] {
   if (opts.tier !== undefined && !(opts.tier in TIER_MODEL)) {
     throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
   }
-  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.6-med"];
+  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.7-med"];
   if (!model) {
     throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
   }
@@ -456,7 +456,7 @@ export async function runAgy(
     const trimmed = out.trim();
     if (!trimmed) {
       throw new AgyError("agy returned empty output", "EMPTY_OUTPUT", {
-        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.6-med"],
+        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.7-med"],
         ...timeoutField,
         durationMs,
         ...convIdField(convId),

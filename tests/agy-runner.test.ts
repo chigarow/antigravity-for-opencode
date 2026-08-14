@@ -46,10 +46,10 @@ function createFakeProc({
 }
 
 describe("buildAgyArgs", () => {
-  test("defaults to flash-3.6-med tier and 10m timeout", () => {
+  test("defaults to flash-3.7-med tier and 10m timeout", () => {
     const args = buildAgyArgs({ prompt: "do something" });
     expect(args).toContain("--model");
-    expect(args).toContain("Gemini 3.6 Flash (Medium)");
+    expect(args).toContain("Gemini 3.7 Flash (Medium)");
     expect(args).toContain("--print-timeout");
     expect(args).toContain("10m");
     expect(args).toContain("-p");
@@ -200,6 +200,10 @@ describe("buildAgyArgs", () => {
     const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" });
     expect(args).toContain("Gemini 3.6 Flash (Medium)");
     expect(args).toContain("10m");
+    // Pairing: explicit flash-3.6-med stays 3.6 while the omitted tier defaults to 3.7
+    const omittedArgs = buildAgyArgs({ prompt: "x" });
+    expect(omittedArgs).toContain("Gemini 3.7 Flash (Medium)");
+    expect(omittedArgs).not.toContain("Gemini 3.6 Flash (Medium)");
   });
 
   test("flash-3.6-med is distinct from flash-3.6-hi and flash-3.6-lo", () => {
@@ -721,6 +725,8 @@ describe("runAgy (injected spawn)", () => {
       expect(e.code).toBe("EMPTY_OUTPUT");
       expect(typeof e.details?.durationMs).toBe("number");
       expect(e.details.durationMs).toBeGreaterThanOrEqual(2_000);
+      // Omitted tier: EMPTY_OUTPUT details.model must report the 3.7 default
+      expect(e.details?.model).toBe("Gemini 3.7 Flash (Medium)");
     }
   });
 
@@ -847,7 +853,7 @@ describe("runAgy (injected spawn)", () => {
       // Pure exit-code branch — nothing on stderr.
       expect(e.code).toBe("TIMEOUT");
       expect(e.details?.exitCode).toBe(124);
-      // 10m default (flash-3.6-med tier, no explicit timeout).
+      // 10m default (flash-3.7-med tier, no explicit timeout).
       expect(e.details?.timeout).toBe("10m");
       expect(typeof e.details?.durationMs).toBe("number");
       expect(e.details.durationMs).toBeGreaterThanOrEqual(7 * 60 * 1000 - 1000);

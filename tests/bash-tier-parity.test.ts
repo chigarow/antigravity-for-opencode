@@ -68,13 +68,13 @@ function readScript(): string {
 }
 
 describe("bash tier parity (scripts/agy-delegate.sh)", () => {
-  test("default TIER is flash-3.6-med", () => {
+  test("default TIER is flash-3.7-med", () => {
     // Given: the standalone delegate script source
     const source = readScript();
 
     // When: we inspect the default TIER assignment
-    // Then: default is the versioned flash-3.6-med slug
-    expect(source).toContain('TIER="flash-3.6-med"');
+    // Then: default is the versioned flash-3.7-med slug
+    expect(source).toContain('TIER="flash-3.7-med"');
   });
 
   test("model_for_tier case arms map each versioned slug to its display name", () => {
@@ -140,7 +140,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
     // flash-3.5-med defaults to 10m (Flash family)
     expect(await timeoutForTier("flash-3.5-med")).toBe("10m");
-    // flash-3.6-med (default tier) also 10m
+    // flash-3.6-med (explicit tier, no longer the default) also 10m
     expect(await timeoutForTier("flash-3.6-med")).toBe("10m");
     // flash-3.7-hi defaults to 10m (Flash family, new 3.7 tier)
     expect(await timeoutForTier("flash-3.7-hi")).toBe("10m");
@@ -148,6 +148,38 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(await timeoutForTier("flash-3.7-lo")).toBe("10m");
     // explicit --timeout always wins, even for Pro family
     expect(await timeoutForTier("pro-3.1-lo", ["--timeout", "5m"])).toBe("5m");
+  });
+
+  test("omitted --tier defaults to Gemini 3.7 Flash (Medium) with 10m print-timeout", async () => {
+    // Given: a fake `agy` on a private PATH that captures every arg it receives
+    const tmp = mkdtempSync(join(tmpdir(), "agy-bash-default-"));
+    const captureFile = join(tmp, "args.txt");
+    const fakeAgy = join(tmp, "agy");
+    writeFileSync(
+      fakeAgy,
+      `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${captureFile}"\necho "fake agy output"\n`,
+    );
+    chmodSync(fakeAgy, 0o755);
+
+    const script = join(import.meta.dir, "..", "scripts", "agy-delegate.sh");
+
+    // When: the real script runs with NO --tier (omitted-tier default path)
+    const proc = Bun.spawn(["bash", script, "task"], {
+      env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const exitCode = await proc.exited;
+
+    // Then: fake agy ran and captured the 3.7 default model + Flash-family 10m timeout
+    expect(exitCode).toBe(0);
+    const lines = readFileSync(captureFile, "utf8").split("\n");
+    const modelIdx = lines.indexOf("--model");
+    expect(modelIdx).toBeGreaterThanOrEqual(0);
+    expect(lines[modelIdx + 1]).toBe("Gemini 3.7 Flash (Medium)");
+    const timeoutIdx = lines.indexOf("--print-timeout");
+    expect(timeoutIdx).toBeGreaterThanOrEqual(0);
+    expect(lines[timeoutIdx + 1]).toBe("10m");
   });
 
   test("unknown-tier die path is still present", () => {

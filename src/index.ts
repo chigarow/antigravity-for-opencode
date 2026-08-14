@@ -39,7 +39,7 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefi
   }
   const header = [
     `## agy result`,
-    `tier: ${args.tier ?? "flash-3.6-med"}`,
+    `tier: ${args.tier ?? "flash-3.7-med"}`,
     `duration: ${result.durationMs}ms`,
     `exit: ${result.exitCode}`,
     args.sandbox ? `sandbox: true` : "",
@@ -51,10 +51,10 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefi
   ].filter(Boolean).join("\n");
 
   return {
-    title: `agy (${args.tier ?? "flash-3.6-med"})`,
+    title: `agy (${args.tier ?? "flash-3.7-med"})`,
     output: header + "\n" + result.stdout,
     metadata: {
-      tier: args.tier ?? "flash-3.6-med",
+      tier: args.tier ?? "flash-3.7-med",
       durationMs: result.durationMs,
       exitCode: result.exitCode,
       tool: "agy",
@@ -102,7 +102,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
           tier: tool.schema
             .enum(["flash-3.5-hi", "flash-3.5-lo", "flash-3.5-med", "pro-3.1-hi", "pro-3.1-lo", "flash-3.6-hi", "flash-3.6-med", "flash-3.6-lo", "flash-3.7-hi", "flash-3.7-med", "flash-3.7-lo"])
             .optional()
-            .describe("Model tier. flash-3.6-med (default) = Gemini 3.6 Flash Medium, flash-3.5-hi = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.5-med = Gemini 3.5 Flash Medium, pro-3.1-hi = stronger Gemini 3.1 Pro, pro-3.1-lo = Gemini 3.1 Pro (Low), flash-3.6-hi = Gemini 3.6 Flash High, flash-3.6-lo = cheapest 3.6 option, flash-3.7-hi = newest fast flash model, flash-3.7-med = Gemini 3.7 Flash Medium, flash-3.7-lo = cheapest 3.7 option."),
+            .describe("Model tier. flash-3.7-med (default) = Gemini 3.7 Flash Medium, flash-3.6-med = Gemini 3.6 Flash Medium, flash-3.5-hi = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.5-med = Gemini 3.5 Flash Medium, pro-3.1-hi = stronger Gemini 3.1 Pro, pro-3.1-lo = Gemini 3.1 Pro (Low), flash-3.6-hi = Gemini 3.6 Flash High, flash-3.6-lo = cheapest 3.6 option, flash-3.7-hi = newest fast flash model, flash-3.7-med = Gemini 3.7 Flash Medium, flash-3.7-lo = cheapest 3.7 option."),
 
           dir: tool.schema
             .string()

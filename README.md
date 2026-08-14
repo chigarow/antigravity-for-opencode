@@ -119,7 +119,7 @@ The plugin's config hook will then register its bundled default on the next load
 ## Tool arguments
 
 - `prompt` (string, required) — The task to send to agy/Gemini.
-- `tier` ("flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo", optional) — Default: "flash-3.6-med". See [Available model tiers](#available-model-tiers) for details.
+- `tier` ("flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo", optional) — Default: "flash-3.7-med". See [Available model tiers](#available-model-tiers) for details.
 
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
 - `project` (string, optional) — Project name passed to agy (`--project <value>`). Useful for scoping agy's work to a specific Google Cloud project.
@@ -207,7 +207,7 @@ See [Tool arguments](#tool-arguments) above for the full list.
 | Tier | Display name | Default timeout |
 | --- | --- | --- |
 | `flash-3.6-lo` | Gemini 3.6 Flash (Low) | 10m |
-| `flash-3.6-med` | Gemini 3.6 Flash (Medium) — default | 10m |
+| `flash-3.6-med` | Gemini 3.6 Flash (Medium) | 10m |
 | `flash-3.6-hi` | Gemini 3.6 Flash (High) | 10m |
 
 ### Gemini 3.7 Flash
@@ -215,7 +215,7 @@ See [Tool arguments](#tool-arguments) above for the full list.
 | Tier | Display name | Default timeout |
 | --- | --- | --- |
 | `flash-3.7-lo` | Gemini 3.7 Flash (Low) | 10m |
-| `flash-3.7-med` | Gemini 3.7 Flash (Medium) | 10m |
+| `flash-3.7-med` | Gemini 3.7 Flash (Medium) — default | 10m |
 | `flash-3.7-hi` | Gemini 3.7 Flash (High) | 10m |
 
 Official model limits (documentation facts only, not enforced by this plugin): 1,048,576 input/context tokens and 65,536 max output tokens per https://deepmind.google/models/model-cards/gemini-3-7-flash
