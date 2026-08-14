@@ -43,6 +43,18 @@ const EXPECTED_TIERS = [
     slug: "flash-3.6-lo",
     display: "Gemini 3.6 Flash (Low)",
   },
+  {
+    slug: "flash-3.7-hi",
+    display: "Gemini 3.7 Flash (High)",
+  },
+  {
+    slug: "flash-3.7-med",
+    display: "Gemini 3.7 Flash (Medium)",
+  },
+  {
+    slug: "flash-3.7-lo",
+    display: "Gemini 3.7 Flash (Low)",
+  },
 ];
 
 /** Case arm whose sole pattern is exactly `slug)` (no compound patterns). */
@@ -76,20 +88,20 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
   });
 
-  test("usage help lists the eight versioned tiers", () => {
+  test("usage help lists the eleven versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all eight tier slugs
+    // When / Then: help documents all eleven tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
     // Tier option line should list them (not the legacy bare trio alone)
     expect(source).toMatch(
-      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*flash-3\.5-med[^>]*pro-3\.1[^>]*pro-3\.1-lo[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*>/,
+      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*flash-3\.5-med[^>]*pro-3\.1[^>]*pro-3\.1-lo[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*flash-3\.7[^>]*flash-3\.7-med[^>]*flash-3\.7-lo[^>]*>/,
     );
     // --timeout help line should list all flash-family tiers that default to 10m
-    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.5-med.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo/);
+    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.5-med.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo.*flash-3\.7.*flash-3\.7-med.*flash-3\.7-lo/);
     // --timeout help should list pro family (15m default)
     expect(source).toMatch(/pro-3\.1.*pro-3\.1-lo/);
   });
@@ -130,6 +142,10 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(await timeoutForTier("flash-3.5-med")).toBe("10m");
     // flash-3.6-med (default tier) also 10m
     expect(await timeoutForTier("flash-3.6-med")).toBe("10m");
+    // flash-3.7-hi defaults to 10m (Flash family, new 3.7 tier)
+    expect(await timeoutForTier("flash-3.7-hi")).toBe("10m");
+    // flash-3.7-lo defaults to 10m (Flash family, new 3.7 tier)
+    expect(await timeoutForTier("flash-3.7-lo")).toBe("10m");
     // explicit --timeout always wins, even for Pro family
     expect(await timeoutForTier("pro-3.1-lo", ["--timeout", "5m"])).toBe("5m");
   });
@@ -169,7 +185,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(stderr).toBe("");
   });
 
-  test("usage help tier list is exactly the eight v0.8.0 tiers", () => {
+  test("usage help tier list is exactly the eleven v0.9.0 tiers", () => {
     // Given: usage() --tier option line
     const source = readScript();
     const m = source.match(/--tier\s+<([^>]+)>/);
@@ -230,6 +246,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
     expect(await timeoutForTier("flash-3.5-hi")).toBe("10m");
     expect(await timeoutForTier("flash-3.6-hi")).toBe("10m");
+    expect(await timeoutForTier("flash-3.7-hi")).toBe("10m");
     expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
   });
 

@@ -13,6 +13,9 @@ const LOCKED_TIERS = [
   "flash-3.6-lo",
   "flash-3.6-med",
   "flash-3.6-hi",
+  "flash-3.7-lo",
+  "flash-3.7-med",
+  "flash-3.7-hi",
 ] as const;
 
 const REMOVED_HIGH = ["flash-3.5", "pro-3.1", "flash-3.6"] as const;
@@ -157,7 +160,7 @@ describe("agy tool tier schema contracts (v0.8.0)", () => {
     return unwrapped.options;
   }
 
-  test("schema accepts exactly the eight v0.8.0 tiers", async () => {
+  test("schema accepts exactly the eleven v0.9.0 tiers", async () => {
     // Given: real tool schema from plugin registration
     const schema = await tierSchema();
     const values = new Set(enumValues(schema));

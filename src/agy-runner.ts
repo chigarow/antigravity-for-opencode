@@ -3,7 +3,7 @@ import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "os";
 import path from "node:path";
 
-export type Tier = "flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo";
+export type Tier = "flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo";
 
 export interface AgyOptions {
   prompt: string;
@@ -54,6 +54,9 @@ const TIER_MODEL: Record<Tier, string> = {
   "flash-3.6-hi": "Gemini 3.6 Flash (High)",
   "flash-3.6-med": "Gemini 3.6 Flash (Medium)",
   "flash-3.6-lo": "Gemini 3.6 Flash (Low)",
+  "flash-3.7-hi": "Gemini 3.7 Flash (High)",
+  "flash-3.7-med": "Gemini 3.7 Flash (Medium)",
+  "flash-3.7-lo": "Gemini 3.7 Flash (Low)",
 };
 
 /**
@@ -69,7 +72,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  *
  * Tier-aware default when no explicit timeout is provided:
  *  - tier === "pro-3.1-hi" || tier === "pro-3.1-lo"  → "15m"  (Pro family: heavier work, longer default)
- *  - any other tier                                → "10m"  (flash-3.5-hi, flash-3.5-lo, flash-3.5-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, or unspecified)
+ *  - any other tier                                → "10m"  (flash-3.5-hi, flash-3.5-lo, flash-3.5-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, flash-3.7-lo, or unspecified)
  *
  * Accepts:
  *  - undefined / null            → tier-aware default

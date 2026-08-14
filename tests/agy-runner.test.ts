@@ -56,7 +56,7 @@ describe("buildAgyArgs", () => {
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps all eight versioned tiers correctly", () => {
+  test("maps all eleven versioned tiers correctly", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.5-hi" })).toContain(
       "Gemini 3.5 Flash (High)"
     );
@@ -80,6 +80,15 @@ describe("buildAgyArgs", () => {
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" })).toContain(
       "Gemini 3.6 Flash (Low)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.7-hi" })).toContain(
+      "Gemini 3.7 Flash (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.7-med" })).toContain(
+      "Gemini 3.7 Flash (Medium)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.7-lo" })).toContain(
+      "Gemini 3.7 Flash (Low)"
     );
   });
 
@@ -204,6 +213,70 @@ describe("buildAgyArgs", () => {
     expect(medArgs).not.toContain("Gemini 3.6 Flash (Low)");
     expect(hiArgs).not.toContain("Gemini 3.6 Flash (Medium)");
     expect(loArgs).not.toContain("Gemini 3.6 Flash (Medium)");
+  });
+
+  // ---- flash-3.7 family: mapping, 10m default, distinctness, overrides (TDD RED) ----
+
+  test("flash-3.7-hi maps to Gemini 3.7 Flash (High) and defaults timeout to 10m", () => {
+    // Given: the new Gemini 3.7 Flash (High) tier
+    // When: buildAgyArgs runs without an explicit timeout
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-hi" });
+    // Then: the frozen display name and the Flash-family 10m default are emitted
+    expect(args).toContain("Gemini 3.7 Flash (High)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.7-med maps to Gemini 3.7 Flash (Medium) and defaults timeout to 10m", () => {
+    // Given: the new Gemini 3.7 Flash (Medium) tier
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-med" });
+    // When / Then: display name and 10m default
+    expect(args).toContain("Gemini 3.7 Flash (Medium)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.7-lo maps to Gemini 3.7 Flash (Low) and defaults timeout to 10m", () => {
+    // Given: the new Gemini 3.7 Flash (Low) tier
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-lo" });
+    // When / Then: display name and 10m default
+    expect(args).toContain("Gemini 3.7 Flash (Low)");
+    expect(args).toContain("10m");
+  });
+
+  test("flash-3.7 tiers are pairwise distinct (hi, med, lo map to different display names)", () => {
+    // Given: all three 3.7 tiers
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.7-hi" });
+    const medArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.7-med" });
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.7-lo" });
+    // When / Then: each emits its own display name and never another 3.7 name
+    expect(hiArgs).toContain("Gemini 3.7 Flash (High)");
+    expect(medArgs).toContain("Gemini 3.7 Flash (Medium)");
+    expect(loArgs).toContain("Gemini 3.7 Flash (Low)");
+    expect(hiArgs).not.toContain("Gemini 3.7 Flash (Medium)");
+    expect(hiArgs).not.toContain("Gemini 3.7 Flash (Low)");
+    expect(medArgs).not.toContain("Gemini 3.7 Flash (High)");
+    expect(medArgs).not.toContain("Gemini 3.7 Flash (Low)");
+    expect(loArgs).not.toContain("Gemini 3.7 Flash (High)");
+    expect(loArgs).not.toContain("Gemini 3.7 Flash (Medium)");
+  });
+
+  test("model override wins for flash-3.7-hi when both model and tier are set", () => {
+    // Given: a 3.7 tier combined with an explicit exact model override
+    const args = buildAgyArgs({
+      prompt: "x",
+      tier: "flash-3.7-hi",
+      model: "Custom 3.7 High Override",
+    });
+    // Then: the explicit model is emitted, the tier display name is not
+    expect(args).toContain("Custom 3.7 High Override");
+    expect(args).not.toContain("Gemini 3.7 Flash (High)");
+  });
+
+  test("flash-3.7-med with explicit timeout uses the explicit value, not the 10m default", () => {
+    // Given: a 3.7 tier with an explicit timeout
+    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-med", timeout: "5m" });
+    // Then: the explicit timeout wins over the tier default
+    expect(args).toContain("5m");
+    expect(args).not.toContain("10m");
   });
 
   test("flash-3.5-lo defaults timeout to 10m", () => {

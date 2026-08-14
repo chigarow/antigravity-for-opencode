@@ -100,9 +100,9 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe("The task to send to agy/Gemini. Be specific and scoped."),
 
           tier: tool.schema
-            .enum(["flash-3.5-hi", "flash-3.5-lo", "flash-3.5-med", "pro-3.1-hi", "pro-3.1-lo", "flash-3.6-hi", "flash-3.6-med", "flash-3.6-lo"])
+            .enum(["flash-3.5-hi", "flash-3.5-lo", "flash-3.5-med", "pro-3.1-hi", "pro-3.1-lo", "flash-3.6-hi", "flash-3.6-med", "flash-3.6-lo", "flash-3.7-hi", "flash-3.7-med", "flash-3.7-lo"])
             .optional()
-            .describe("Model tier. flash-3.6-med (default) = Gemini 3.6 Flash Medium, flash-3.5-hi = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.5-med = Gemini 3.5 Flash Medium, pro-3.1-hi = stronger Gemini 3.1 Pro, pro-3.1-lo = Gemini 3.1 Pro (Low), flash-3.6-hi = latest fast model, flash-3.6-lo = cheapest 3.6 option."),
+            .describe("Model tier. flash-3.6-med (default) = Gemini 3.6 Flash Medium, flash-3.5-hi = fast/cheap Gemini 3.5 Flash High, flash-3.5-lo = cheapest, flash-3.5-med = Gemini 3.5 Flash Medium, pro-3.1-hi = stronger Gemini 3.1 Pro, pro-3.1-lo = Gemini 3.1 Pro (Low), flash-3.6-hi = Gemini 3.6 Flash High, flash-3.6-lo = cheapest 3.6 option, flash-3.7-hi = newest fast flash model, flash-3.7-med = Gemini 3.7 Flash Medium, flash-3.7-lo = cheapest 3.7 option."),
 
           dir: tool.schema
             .string()
@@ -121,7 +121,7 @@ export const AgyPlugin: Plugin = async (ctx) => {
             .describe(
               "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or raw milliseconds (e.g. 300000 or 600000). " +
               "Numbers/strings of digits are normalized to proper duration (300000 → '5m'). " +
-              "Default depends on tier: 'pro-3.1-hi' and 'pro-3.1-lo' default to '15m' (heavier work); flash-3.5-hi/flash-3.5-lo/flash-3.5-med/flash-3.6-hi/flash-3.6-med/flash-3.6-lo default to '10m'. " +
+              "Default depends on tier: 'pro-3.1-hi' and 'pro-3.1-lo' default to '15m' (heavier work); flash-3.5-hi/flash-3.5-lo/flash-3.5-med/flash-3.6-hi/flash-3.6-med/flash-3.6-lo/flash-3.7-hi/flash-3.7-med/flash-3.7-lo default to '10m'. " +
               "Hard upper bound: any value above 4h is silently clamped to '4h'. " +
               "For long tasks (big merges, heavy refactors) use '15m' or '30m' and/or tier=pro-3.1-hi."
             ),
