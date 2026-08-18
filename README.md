@@ -1,3 +1,5 @@
+
+
 # opencode-agy
 
 OpenCode plugin for delegating scoped work to the Antigravity CLI (`agy` / Gemini) in headless mode.
@@ -290,7 +292,7 @@ Tests include:
 - Full argument building and tier mapping
 - Success and all error paths (quota, auth, timeout, not found, empty, truncation)
 - Plugin shape verification (the `agy` tool and `/agy` command are registered)
-- Real agy integration (gracefully handles slow environments)
+- Real agy integration (gracefully handles slow environments; skipped unless `agy` is on PATH and `AGY_INTEGRATION=1` is set)
 
 ## Philosophy
 
