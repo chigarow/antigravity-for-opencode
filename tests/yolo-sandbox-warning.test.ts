@@ -58,14 +58,14 @@ describe("header / stdout separator (Wave 5.5 regression)", () => {
 });
 
 describe("buildAgyToolResult tier reporting", () => {
-  test("no tier defaults to flash-3.7-med in header, title, and metadata", () => {
+  test("no tier defaults to flash-3.8-med in header, title, and metadata", () => {
     // Given: buildAgyToolResult called without an explicit tier
     const result = buildAgyToolResult({ prompt: "x" }, fakeResult);
 
-    // Then: all three surfaces report flash-3.7-med (new default)
-    expect(result.output).toContain("tier: flash-3.7-med");
-    expect(result.title).toBe("agy (flash-3.7-med)");
-    expect(result.metadata?.tier).toBe("flash-3.7-med");
+    // Then: all three surfaces report flash-3.8-med (new default)
+    expect(result.output).toContain("tier: flash-3.8-med");
+    expect(result.title).toBe("agy (flash-3.8-med)");
+    expect(result.metadata?.tier).toBe("flash-3.8-med");
   });
 
   test("explicit tier flash-3.6-med propagates to header, title, and metadata", () => {
@@ -94,14 +94,14 @@ describe("buildAgyToolResult tier reporting", () => {
     expect(result.metadata?.tier).toBe("flash-3.6-hi");
   });
 
-  test("explicit tier flash-3.5-med propagates to header, title, and metadata", () => {
+  test("explicit tier flash-3.8-med propagates to header, title, and metadata", () => {
     const result = buildAgyToolResult(
-      { prompt: "x", tier: "flash-3.5-med" },
+      { prompt: "x", tier: "flash-3.8-med" },
       fakeResult
     );
-    expect(result.output).toContain("tier: flash-3.5-med");
-    expect(result.title).toBe("agy (flash-3.5-med)");
-    expect(result.metadata?.tier).toBe("flash-3.5-med");
+    expect(result.output).toContain("tier: flash-3.8-med");
+    expect(result.title).toBe("agy (flash-3.8-med)");
+    expect(result.metadata?.tier).toBe("flash-3.8-med");
   });
 
   test("explicit tier pro-3.1-lo propagates to header, title, and metadata", () => {

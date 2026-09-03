@@ -12,16 +12,16 @@ const SCRIPT_PATH = join(import.meta.dir, "..", "scripts", "agy-delegate.sh");
 
 const EXPECTED_TIERS = [
   {
-    slug: "flash-3.5-hi",
-    display: "Gemini 3.5 Flash (High)",
+    slug: "flash-3.8-hi",
+    display: "Gemini 3.8 Flash (High)",
   },
   {
-    slug: "flash-3.5-lo",
-    display: "Gemini 3.5 Flash (Low)",
+    slug: "flash-3.8-lo",
+    display: "Gemini 3.8 Flash (Low)",
   },
   {
-    slug: "flash-3.5-med",
-    display: "Gemini 3.5 Flash (Medium)",
+    slug: "flash-3.8-med",
+    display: "Gemini 3.8 Flash (Medium)",
   },
   {
     slug: "pro-3.1-hi",
@@ -68,13 +68,13 @@ function readScript(): string {
 }
 
 describe("bash tier parity (scripts/agy-delegate.sh)", () => {
-  test("default TIER is flash-3.7-med", () => {
+  test("default TIER is flash-3.8-med", () => {
     // Given: the standalone delegate script source
     const source = readScript();
 
     // When: we inspect the default TIER assignment
-    // Then: default is the versioned flash-3.7-med slug
-    expect(source).toContain('TIER="flash-3.7-med"');
+    // Then: default is the versioned flash-3.8-med slug
+    expect(source).toContain('TIER="flash-3.8-med"');
   });
 
   test("model_for_tier case arms map each versioned slug to its display name", () => {
@@ -98,10 +98,10 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
     // Tier option line should list them (not the legacy bare trio alone)
     expect(source).toMatch(
-      /--tier\s+<[^>]*flash-3\.5[^>]*flash-3\.5-lo[^>]*flash-3\.5-med[^>]*pro-3\.1[^>]*pro-3\.1-lo[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*flash-3\.7[^>]*flash-3\.7-med[^>]*flash-3\.7-lo[^>]*>/,
+      /--tier\s+<[^>]*flash-3\.8[^>]*flash-3\.8-lo[^>]*flash-3\.8-med[^>]*pro-3\.1[^>]*pro-3\.1-lo[^>]*flash-3\.6[^>]*flash-3\.6-med[^>]*flash-3\.6-lo[^>]*flash-3\.7[^>]*flash-3\.7-med[^>]*flash-3\.7-lo[^>]*>/,
     );
     // --timeout help line should list all flash-family tiers that default to 10m
-    expect(source).toMatch(/--timeout.*flash-3\.5.*flash-3\.5-lo.*flash-3\.5-med.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo.*flash-3\.7.*flash-3\.7-med.*flash-3\.7-lo/);
+    expect(source).toMatch(/--timeout.*flash-3\.8.*flash-3\.8-lo.*flash-3\.8-med.*flash-3\.6.*flash-3\.6-med.*flash-3\.6-lo.*flash-3\.7.*flash-3\.7-med.*flash-3\.7-lo/);
     // --timeout help should list pro family (15m default)
     expect(source).toMatch(/pro-3\.1.*pro-3\.1-lo/);
   });
@@ -138,8 +138,8 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(await timeoutForTier("pro-3.1-lo")).toBe("15m");
     // pro-3.1-hi also defaults to 15m (verifying the bash timeout fix for existing tier)
     expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
-    // flash-3.5-med defaults to 10m (Flash family)
-    expect(await timeoutForTier("flash-3.5-med")).toBe("10m");
+    // flash-3.8-med defaults to 10m (Flash family)
+    expect(await timeoutForTier("flash-3.8-med")).toBe("10m");
     // flash-3.6-med (explicit tier, no longer the default) also 10m
     expect(await timeoutForTier("flash-3.6-med")).toBe("10m");
     // flash-3.7-hi defaults to 10m (Flash family, new 3.7 tier)
@@ -150,7 +150,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(await timeoutForTier("pro-3.1-lo", ["--timeout", "5m"])).toBe("5m");
   });
 
-  test("omitted --tier defaults to Gemini 3.7 Flash (Medium) with 10m print-timeout", async () => {
+  test("omitted --tier defaults to Gemini 3.8 Flash (Medium) with 10m print-timeout", async () => {
     // Given: a fake `agy` on a private PATH that captures every arg it receives
     const tmp = mkdtempSync(join(tmpdir(), "agy-bash-default-"));
     const captureFile = join(tmp, "args.txt");
@@ -171,12 +171,12 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     });
     const exitCode = await proc.exited;
 
-    // Then: fake agy ran and captured the 3.7 default model + Flash-family 10m timeout
+    // Then: fake agy ran and captured the 3.8 default model + Flash-family 10m timeout
     expect(exitCode).toBe(0);
     const lines = readFileSync(captureFile, "utf8").split("\n");
     const modelIdx = lines.indexOf("--model");
     expect(modelIdx).toBeGreaterThanOrEqual(0);
-    expect(lines[modelIdx + 1]).toBe("Gemini 3.7 Flash (Medium)");
+    expect(lines[modelIdx + 1]).toBe("Gemini 3.8 Flash (Medium)");
     const timeoutIdx = lines.indexOf("--print-timeout");
     expect(timeoutIdx).toBeGreaterThanOrEqual(0);
     expect(lines[timeoutIdx + 1]).toBe("10m");
@@ -217,7 +217,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(stderr).toBe("");
   });
 
-  test("usage help tier list is exactly the eleven v0.9.0 tiers", () => {
+  test("usage help tier list is exactly the eleven v0.10.0 tiers", () => {
     // Given: usage() --tier option line
     const source = readScript();
     const m = source.match(/--tier\s+<([^>]+)>/);
@@ -239,7 +239,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     writeFileSync(fakeAgy, `#!/usr/bin/env bash\necho fake\n`);
     chmodSync(fakeAgy, 0o755);
     const script = SCRIPT_PATH;
-    const removed = ["flash-3.5", "pro-3.1", "flash-3.6", "flash", "flash-lo", "pro"];
+    const removed = ["flash-3.5", "flash-3.5-hi", "flash-3.5-med", "flash-3.5-lo", "pro-3.1", "flash-3.6", "flash", "flash-lo", "pro"];
     for (const tier of removed) {
       const proc = Bun.spawn(["bash", script, "--tier", tier, "task"], {
         env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
@@ -276,7 +276,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
       const idx = lines.indexOf("--print-timeout");
       return idx >= 0 ? lines[idx + 1] : undefined;
     }
-    expect(await timeoutForTier("flash-3.5-hi")).toBe("10m");
+    expect(await timeoutForTier("flash-3.8-hi")).toBe("10m");
     expect(await timeoutForTier("flash-3.6-hi")).toBe("10m");
     expect(await timeoutForTier("flash-3.7-hi")).toBe("10m");
     expect(await timeoutForTier("pro-3.1-hi")).toBe("15m");
@@ -292,7 +292,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
       `#!/usr/bin/env bash\ntouch "${marker}"\necho fake\n`,
     );
     chmodSync(fakeAgy, 0o755);
-    const removed = ["flash-3.5", "pro-3.1", "flash-3.6"] as const;
+    const removed = ["flash-3.5", "flash-3.5-hi", "flash-3.5-med", "flash-3.5-lo", "pro-3.1", "flash-3.6"] as const;
 
     for (const tier of removed) {
       try { unlinkSync(marker); } catch {}

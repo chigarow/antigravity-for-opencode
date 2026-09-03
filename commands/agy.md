@@ -6,7 +6,7 @@ Delegate this task to the `agy` tool (runs Antigravity/Gemini in headless mode a
 $ARGUMENTS
 
 Guidelines:
-- Choose one of the eleven versioned tiers: `flash-3.7-med` (default Medium), `flash-3.6-hi`, `flash-3.6-lo`, `flash-3.6-med`, `flash-3.7-hi`, `flash-3.7-lo`, `flash-3.5-hi`, `flash-3.5-med`, `flash-3.5-lo`, `pro-3.1-hi`, or `pro-3.1-lo`, based on task complexity. Removed unsuffixed High names (`flash-3.5`, `pro-3.1`, `flash-3.6`) and older bare names have no aliases.
+- Choose one of the eleven versioned tiers: `flash-3.8-med` (default), `flash-3.8-hi`, `flash-3.8-lo`, `flash-3.7-hi`, `flash-3.7-med`, `flash-3.7-lo`, `flash-3.6-hi`, `flash-3.6-med`, `flash-3.6-lo`, `pro-3.1-hi`, or `pro-3.1-lo`, based on task complexity. Removed names (`flash-3.5`, `flash-3.5-hi`, `flash-3.5-med`, `flash-3.5-lo`, `pro-3.1`, `flash-3.6` unsuffixed, older bare names) have no aliases.
 - Use `sandbox: true` only when the task can run without full filesystem or shell access.
 - Use `project: "<name>"` to scope the task to a specific Google Cloud project (`--project <value>`).
 - Use `yolo: true` only for deliberate, reviewed branch or worktree work, not as the default for merges.

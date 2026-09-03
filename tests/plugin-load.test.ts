@@ -5,17 +5,17 @@ import type { Config, Hooks, PluginInput } from "@opencode-ai/plugin";
 import { z } from "zod";
 
 const LOCKED_TIERS = [
-  "flash-3.5-lo",
-  "flash-3.5-med",
-  "flash-3.5-hi",
-  "pro-3.1-lo",
+  "flash-3.8-hi",
+  "flash-3.8-lo",
+  "flash-3.8-med",
   "pro-3.1-hi",
-  "flash-3.6-lo",
-  "flash-3.6-med",
+  "pro-3.1-lo",
   "flash-3.6-hi",
-  "flash-3.7-lo",
-  "flash-3.7-med",
+  "flash-3.6-med",
+  "flash-3.6-lo",
   "flash-3.7-hi",
+  "flash-3.7-med",
+  "flash-3.7-lo",
 ] as const;
 
 const REMOVED_HIGH = ["flash-3.5", "pro-3.1", "flash-3.6"] as const;
@@ -160,7 +160,7 @@ describe("agy tool tier schema contracts (v0.8.0)", () => {
     return unwrapped.options;
   }
 
-  test("schema accepts exactly the eleven v0.9.0 tiers", async () => {
+  test("schema accepts exactly the eleven v0.10.0 tiers", async () => {
     // Given: real tool schema from plugin registration
     const schema = await tierSchema();
     const values = new Set(enumValues(schema));

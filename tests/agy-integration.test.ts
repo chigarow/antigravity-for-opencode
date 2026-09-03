@@ -19,7 +19,7 @@ describe("real agy integration (headless)", () => {
     try {
       const result = await runAgy({
         prompt: "Reply with exactly the word: INTEGRATION_OK and nothing else.",
-        tier: "flash-3.5-hi",
+        tier: "flash-3.8-lo",
         timeout: "25s",
       });
 
@@ -47,6 +47,26 @@ describe("real agy integration (headless)", () => {
       expect(result.stdout.toUpperCase()).toContain("GEM37_OK");
     } catch (e: unknown) {
       // Acceptable in slow/CI environments — same tolerance as the existing live test
+      if (e instanceof AgyError && (e.code === "TIMEOUT" || e.code === "QUOTA_EXHAUSTED")) {
+        console.log("[integration] agy slow or limited, got expected error:", e.code);
+        return;
+      }
+      throw e;
+    }
+  }, 30000);
+
+  test.skipIf(!integrationEnabled)("flash-3.8-med tier (new default model) returns output or times out gracefully", async () => {
+    try {
+      const result = await runAgy({
+        prompt: "Reply with exactly the word: GEM38_OK and nothing else.",
+        tier: "flash-3.8-med",
+        timeout: "25s",
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toUpperCase()).toContain("GEM38_OK");
+    } catch (e: unknown) {
+      // Acceptable in slow/CI environments — same tolerance as the existing live tests
       if (e instanceof AgyError && (e.code === "TIMEOUT" || e.code === "QUOTA_EXHAUSTED")) {
         console.log("[integration] agy slow or limited, got expected error:", e.code);
         return;

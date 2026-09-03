@@ -3,7 +3,7 @@ import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "os";
 import path from "node:path";
 
-export type Tier = "flash-3.5-hi" | "flash-3.5-lo" | "flash-3.5-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo";
+export type Tier = "flash-3.8-hi" | "flash-3.8-lo" | "flash-3.8-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo";
 
 export interface AgyOptions {
   prompt: string;
@@ -46,9 +46,9 @@ export class AgyError extends Error {
 }
 
 const TIER_MODEL: Record<Tier, string> = {
-  "flash-3.5-hi": "Gemini 3.5 Flash (High)",
-  "flash-3.5-lo": "Gemini 3.5 Flash (Low)",
-  "flash-3.5-med": "Gemini 3.5 Flash (Medium)",
+  "flash-3.8-hi": "Gemini 3.8 Flash (High)",
+  "flash-3.8-lo": "Gemini 3.8 Flash (Low)",
+  "flash-3.8-med": "Gemini 3.8 Flash (Medium)",
   "pro-3.1-hi": "Gemini 3.1 Pro (High)",
   "pro-3.1-lo": "Gemini 3.1 Pro (Low)",
   "flash-3.6-hi": "Gemini 3.6 Flash (High)",
@@ -72,7 +72,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  *
  * Tier-aware default when no explicit timeout is provided:
  *  - tier === "pro-3.1-hi" || tier === "pro-3.1-lo"  → "15m"  (Pro family: heavier work, longer default)
- *  - any other tier                                → "10m"  (flash-3.5-hi, flash-3.5-lo, flash-3.5-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, flash-3.7-lo, or unspecified)
+ *  - any other tier                                → "10m"  (flash-3.8-hi, flash-3.8-lo, flash-3.8-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, flash-3.7-lo, or unspecified)
  *
  * Accepts:
  *  - undefined / null            → tier-aware default
@@ -93,7 +93,7 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  * classification, not as INVALID_TIMEOUT, so user-facing surface stays
  * stable.
  */
-function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.7-med"): string {
+function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.8-med"): string {
   if (t == null) return tier === "pro-3.1-hi" || tier === "pro-3.1-lo" ? "15m" : "10m";
 
   // Validate + coerce. The cap is applied uniformly to whatever this
@@ -317,7 +317,7 @@ export function buildAgyArgs(opts: AgyOptions): string[] {
   if (opts.tier !== undefined && !(opts.tier in TIER_MODEL)) {
     throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
   }
-  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.7-med"];
+  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.8-med"];
   if (!model) {
     throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
   }
@@ -456,7 +456,7 @@ export async function runAgy(
     const trimmed = out.trim();
     if (!trimmed) {
       throw new AgyError("agy returned empty output", "EMPTY_OUTPUT", {
-        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.7-med"],
+        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.8-med"],
         ...timeoutField,
         durationMs,
         ...convIdField(convId),
