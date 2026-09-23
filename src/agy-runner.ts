@@ -16,6 +16,7 @@ export interface AgyOptions {
   continue?: boolean;
   conversation?: string;
   model?: string; // exact model name override (future-proof)
+  signal?: AbortSignal;
 }
 
 export interface AgyResult {
@@ -360,6 +361,7 @@ export async function runAgy(
   // directory; chmod ensures owner-only access even if the platform default
   // is more permissive. The entire directory is removed in finally.
   const logDir = await mkdtemp(path.join(tmpdir(), "opencode-agy-"));
+  let abortHandler: (() => void) | undefined;
   try {
     await chmod(logDir, 0o700);
     const logFile = path.join(logDir, "agy.log");
@@ -384,6 +386,15 @@ export async function runAgy(
         );
       }
       throw err;
+    }
+
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        proc.kill();
+      } else {
+        abortHandler = () => proc.kill();
+        opts.signal.addEventListener("abort", abortHandler, { once: true });
+      }
     }
 
     proc.stdin.end();
@@ -472,6 +483,9 @@ export async function runAgy(
     if (convId) result.conversationId = convId;
     return result;
   } finally {
+    if (opts.signal && abortHandler) {
+      opts.signal.removeEventListener("abort", abortHandler);
+    }
     // Best-effort whole-directory cleanup of the per-run temp directory.
     // Never let a leftover dir break the call or leak on disk.
     await rm(logDir, { recursive: true, force: true }).catch(() => {});
