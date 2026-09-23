@@ -37,11 +37,13 @@ It provides two surfaces, modeled after the Claude Code reference:
 
 This plugin does not claim perfect compatibility. It is designed to stay small, with minimal hook surface, and work alongside other plugins, but you should still review changes in a branch or worktree and inspect the diff before trusting a merge or other risky task.
 
-- Tool name `agy` does not exist in oh-my-openagent.
-- One config hook registers the `/agy` command; no event or execution hooks are used.
-- No shared config keys or namespaces.
+### OpenCode host engine compatibility (1.x and 2.x)
 
-You can usually load both plugins together, but treat that as a practical coexistence note, not a guarantee.
+`opencode-agy` supports both **OpenCode 2.x** and **OpenCode 1.x** using a universal dual-export plugin architecture:
+
+- **OpenCode 2.x**: Fully supported via the 2.x plugin lifecycle. Exposes `setup(ctx)` / `AgyPlugin.setup` with `ctx.tool.transform` and `ctx.command.transform`. Seamlessly supports process cancellation via `AbortSignal` forwarded from `context.signal`.
+- **OpenCode 1.x**: Fully backwards-compatible via the 1.x server hook (`AgyPlugin(ctx)` and `server(ctx)` returning `{ tool, config }`).
+- **Coexistence**: Tool name `agy` does not conflict with oh-my-openagent. No shared config keys or namespaces.
 
 ### Agy 1.1.13 compatibility
 
@@ -57,18 +59,20 @@ Observed compatibility is empirical against local Agy 1.1.13 (`agy --version`). 
 
 ### The easy way (npm)
 
-Just add this to your `~/.config/opencode/opencode.json` (or your project's `opencode.json`):
+#### OpenCode 2.x
+
+Add `opencode-agy` to `"plugins"` in your `opencode.json` (or `.opencode/config.json`):
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-agy"]
+  "plugins": ["opencode-agy@latest"]
 }
 ```
 
-This will install the latest version available at the time opencode first loads the plugin.
+#### OpenCode 1.x (Backwards Compatibility)
 
-**Recommended:** To always pull the newest version (including patch releases), use `@latest`:
+In OpenCode 1.x, plugins are configured using the singular `"plugin"` array in `~/.config/opencode/opencode.json` (or your project's `opencode.json`):
 
 ```json
 {
@@ -77,9 +81,22 @@ This will install the latest version available at the time opencode first loads 
 }
 ```
 
-Restart opencode. It will automatically download and load the plugin from npm (cached in `~/.cache/opencode/node_modules/`).
+Restart OpenCode. It will automatically download and load the plugin from npm (cached in your OpenCode cache directory).
 
 Both the `agy` tool and `/agy` slash command are now available. No manual copy steps needed.
+
+### Upgrading to OpenCode 2.x
+
+When upgrading from OpenCode 1.x to OpenCode 2.x:
+
+1. **Update config key**: In your configuration (`opencode.json` or `.opencode/config.json`), change `"plugin"` (singular) to `"plugins"` (plural):
+   ```json
+   {
+     "plugins": ["opencode-agy@latest"]
+   }
+   ```
+2. **Automatic runtime detection**: The plugin detects whether it is running under OpenCode 1.x or 2.x and mounts the appropriate lifecycle hooks (`setup` vs `server`). No code changes or special flags are required.
+3. **Subprocess cancellation**: In OpenCode 2.x, cancelling a turn or aborting an agent run automatically signals and terminates running `agy` child processes.
 
 ### Migrating from a manually copied `/agy` command
 
@@ -104,16 +121,23 @@ The plugin's config hook will then register its bundled default on the next load
    git clone https://github.com/chigarow/antigravity-for-opencode.git
    cd antigravity-for-opencode
    bun install
-   bun run build
+   bun run build:all
    ```
 
 2. Add the local path instead:
 
+   **OpenCode 2.x**:
+   ```json
+   "plugins": ["file:///absolute/path/to/antigravity-for-opencode/dist/index.js"]
+   ```
+
+   **OpenCode 1.x**:
    ```json
    "plugin": ["file:///absolute/path/to/antigravity-for-opencode/dist/index.js"]
    ```
 
 3. Restart opencode.
+
 
 
 ## Tool arguments

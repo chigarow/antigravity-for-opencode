@@ -2,6 +2,13 @@ import type { Plugin } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin";
 import { runAgy, AgyError, type Tier, type AgyResult } from "./agy-runner";
 import { createAgyCommand, isCommandDef } from "./agy-command";
+import { setupV2Plugin, buildAgyV2ToolResult, AGY_V2_TOOL_SCHEMA } from "./agy-v2";
+
+export interface UniversalAgyPlugin extends Plugin {
+  id: string;
+  server: Plugin;
+  setup: (ctx: any) => Promise<void> | void;
+}
 
 /**
  * Arguments accepted by the agy tool and by {@link buildAgyToolResult}.
@@ -80,7 +87,7 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefi
  * - Supports `--sandbox`, `--continue`, `--conversation`, and exact model override.
  * - Slash command is provided via commands/agy.md.
  */
-export const AgyPlugin: Plugin = async (ctx) => {
+const v1Server: Plugin = async (ctx) => {
   return {
     tool: {
       agy: tool({
@@ -230,4 +237,13 @@ export const AgyPlugin: Plugin = async (ctx) => {
   };
 };
 
+const AgyPlugin = v1Server as UniversalAgyPlugin;
+AgyPlugin.id = "opencode-agy";
+AgyPlugin.server = v1Server;
+AgyPlugin.setup = setupV2Plugin;
+
+export const server = AgyPlugin.server;
+export const setup = AgyPlugin.setup;
+export { AgyPlugin };
+export { setupV2Plugin, buildAgyV2ToolResult, AGY_V2_TOOL_SCHEMA };
 export default AgyPlugin;
