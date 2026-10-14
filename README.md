@@ -45,14 +45,17 @@ This plugin does not claim perfect compatibility. It is designed to stay small, 
 - **OpenCode 1.x**: Fully backwards-compatible via the 1.x server hook (`AgyPlugin(ctx)` and `server(ctx)` returning `{ tool, config }`).
 - **Coexistence**: Tool name `agy` does not conflict with oh-my-openagent. No shared config keys or namespaces.
 
-### Agy 1.1.13 compatibility
+### Agy 1.3.5 compatibility
 
-Observed compatibility is empirical against local Agy 1.1.13 (`agy --version`). All eleven exact display-name model values and wrapper-emitted flags were accepted. The following qualified caveats apply:
+Observed compatibility is empirical against local Agy 1.3.5 (`agy --version`). The twelve tier display-name values and wrapper-emitted flags are accepted where the signed-in account exposes the model; `argon-4-*` is Ultra-only today, so its display names follow the same `<Base> (<Effort>)` pattern but are unverified against a local Ultra account. The following qualified caveats apply:
 
-- In print/headless mode, Agy 1.1.13 can expand slash commands and skills when prompt content begins with `/`.
-- Agy 1.1.13 also recognizes slash commands after a leading newline or tab.
+- In print/headless mode, Agy 1.3.5 can expand slash commands and skills when prompt content begins with `/`.
+- Agy 1.3.5 also recognizes slash commands after a leading newline or tab.
 - Callers needing literal slash-prefixed content at those recognition positions should restructure the prompt; this plugin intentionally does not expose `--disable-slash-commands` yet.
-- Agy 1.1.13's default system-temp write grant is a qualified upstream reliability improvement for headless temp-log writes, not a universal guarantee.
+- Since Agy 1.3.2, `--dangerously-skip-permissions` (the plugin's `yolo: true`) no longer auto-approves `/plan` artifacts; plan artifacts still require explicit review.
+- Since Agy 1.3.0, the default verbosity is `medium` (previously `high`).
+- Since Agy 1.2.10, headless model errors exit with code 3 and print an `AGY_ERROR` JSON line; the plugin classifies this as `MODEL_NOT_FOUND` with the upstream text. On a Pro account, `argon-4-*` tiers report `MODEL_NOT_FOUND` until Ultra unlocks them.
+- Agy 1.3.5's default system-temp write grant is a qualified upstream reliability improvement for headless temp-log writes, not a universal guarantee.
 - Observed compatibility is empirical; users should check their local `agy --version`.
 
 ## Installation
@@ -143,12 +146,12 @@ The plugin's config hook will then register its bundled default on the next load
 ## Tool arguments
 
 - `prompt` (string, required) — The task to send to agy/Gemini.
-- `tier` ("flash-3.8-hi" | "flash-3.8-lo" | "flash-3.8-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo", optional) — Default: "flash-3.8-med". See [Available model tiers](#available-model-tiers) for details.
+- `tier` ("flash-3.8-hi" | "flash-3.8-lo" | "flash-3.8-med" | "claude-sonnet-5-5-hi" | "claude-sonnet-5-5-med" | "claude-sonnet-5-5-lo" | "claude-opus-5-5-hi" | "claude-opus-5-5-med" | "claude-opus-5-5-lo" | "argon-4-hi" | "argon-4-med" | "argon-4-lo", optional) — Default: "flash-3.8-med". See [Available model tiers](#available-model-tiers) for details.
 
 - `dir` (string, optional) — Workspace directory (`--add-dir`).
 - `project` (string, optional) — Project name passed to agy (`--project <value>`). Useful for scoping agy's work to a specific Google Cloud project.
-- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Default depends on tier. `pro-3.1-hi` and `pro-3.1-lo` default to `15m`; `flash-3.8-hi`, `flash-3.8-lo`, `flash-3.8-med`, `flash-3.6-hi`, `flash-3.6-med`, `flash-3.6-lo`, `flash-3.7-hi`, `flash-3.7-med`, and `flash-3.7-lo` default to `10m`. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
-- `yolo` (boolean, optional) — Auto-approve all permissions inside agy. Only use with a reviewed diff, a throwaway branch or worktree, and `sandbox: true` when the task does not need direct filesystem or shell access.
+- `timeout` (string | number, optional) — Pass a duration like "5m", "10m", "30m", or "300s", or pass raw milliseconds such as `300000`. Digit-only values are normalized, so `300000` becomes about `5m`. Defaults to `15m` for all tiers. Anything above `4h` is silently clamped to `4h`, and `0` or `0s` is accepted as a valid zero timeout. For longer work, prefer explicit retries with `continue: true` or `conversation: <id>` rather than one huge timeout.
+- `yolo` (boolean, optional) — Auto-approve permissions inside agy. Since Agy 1.3.2 this no longer auto-approves `/plan` artifacts. Only use with a reviewed diff, a throwaway branch or worktree, and `sandbox: true` when the task does not need direct filesystem or shell access.
 - `sandbox` (boolean, optional) — Run agy with terminal restrictions (`--sandbox`). Helpful for safer execution, but it can block merge or filesystem heavy work.
 - `continue` (boolean, optional) — Resume the most recent agy conversation. Mutually exclusive with `conversation`.
 - `conversation` (string, optional) — Resume a specific agy conversation by ID. Mutually exclusive with `continue`.
@@ -156,7 +159,7 @@ The plugin's config hook will then register its bundled default on the next load
 
 ### Handling long-running work
 
-A 5-minute default used to be enough, but real engineering tasks aren't. The current defaults are `10m` for `flash-3.8-hi`, `flash-3.8-lo`, `flash-3.8-med`, `flash-3.6-hi`, `flash-3.6-med`, `flash-3.6-lo`, `flash-3.7-hi`, `flash-3.7-med`, and `flash-3.7-lo`, and `15m` for `pro-3.1-hi` and `pro-3.1-lo`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
+A 5-minute default used to be enough, but real engineering tasks aren't. All twelve tiers currently default to `15m`. The timeout parser also accepts `0`, `0s`, raw milliseconds, and duration strings, and anything above `4h` is clamped to `4h`.
 
 - For **git merges with conflicts**, **heavy refactors**, and **large test generation**: prefer a reviewed diff, a fresh branch or worktree, and a clear rollback plan. Use `sandbox: true` only when the task does not need full shell or filesystem access. If you need to auto-approve permissions, `yolo: true` is a deliberate escalation, not a default. 
 - If the task still hits the limit, the plugin returns a structured `AGY_ERROR [TIMEOUT]` with the configured timeout, the observed duration, and a `suggestedNextTimeout` so you can retry without guessing. The calling agent can then retry with `continue: true` or `conversation: <id>` and a higher `timeout`.
@@ -168,7 +171,7 @@ Example for a slow merge:
 ```json
 {
   "prompt": "merge feature/auth into main, resolve conflicts, run the full test suite",
-  "tier": "pro-3.1-hi",
+  "tier": "claude-opus-5-5-hi",
   "timeout": "30m",
   "yolo": true,
   "dir": "/path/to/your/repo"
@@ -190,7 +193,7 @@ The plugin tees agy's log to a private temp file, extracts the conversation ID f
 try {
   await agy({
     prompt: "merge feature/auth into main, resolve conflicts, run the full test suite",
-    tier: "pro-3.1-hi",
+    tier: "claude-opus-5-5-hi",
     timeout: "20m",
     yolo: true,
     dir: "/path/to/your/repo",
@@ -218,40 +221,45 @@ See [Tool arguments](#tool-arguments) above for the full list.
 
 ## Available model tiers
 
-### Gemini 3.6 Flash
-
-| Tier | Display name | Default timeout |
-| --- | --- | --- |
-| `flash-3.6-lo` | Gemini 3.6 Flash (Low) | 10m |
-| `flash-3.6-med` | Gemini 3.6 Flash (Medium) | 10m |
-| `flash-3.6-hi` | Gemini 3.6 Flash (High) | 10m |
-
-### Gemini 3.7 Flash
-
-| Tier | Display name | Default timeout |
-| --- | --- | --- |
-| `flash-3.7-lo` | Gemini 3.7 Flash (Low) | 10m |
-| `flash-3.7-med` | Gemini 3.7 Flash (Medium) | 10m |
-| `flash-3.7-hi` | Gemini 3.7 Flash (High) | 10m |
-
-Official model limits (documentation facts only, not enforced by this plugin): 1,048,576 input/context tokens and 65,536 max output tokens per https://deepmind.google/models/model-cards/gemini-3-7-flash
-
 ### Gemini 3.8 Flash
 
 | Tier | Display name | Default timeout |
 | --- | --- | --- |
-| `flash-3.8-lo` | Gemini 3.8 Flash (Low) | 10m |
-| `flash-3.8-med` | Gemini 3.8 Flash (Medium) — default | 10m |
-| `flash-3.8-hi` | Gemini 3.8 Flash (High) | 10m |
+| `flash-3.8-lo` | Gemini 3.8 Flash (Low) | 15m |
+| `flash-3.8-med` | Gemini 3.8 Flash (Medium) — default | 15m |
+| `flash-3.8-hi` | Gemini 3.8 Flash (High) | 15m |
 
 Official model limits (documentation facts only, not enforced by this plugin): 1,000,000 input/context tokens and 65,536 max output tokens per https://deepmind.google/models/model-cards/gemini-3-8-flash
 
-### Gemini 3.1 Pro
+### Claude Sonnet 5.5
 
 | Tier | Display name | Default timeout |
 | --- | --- | --- |
-| `pro-3.1-lo` | Gemini 3.1 Pro (Low) | 15m |
-| `pro-3.1-hi` | Gemini 3.1 Pro (High) | 15m |
+| `claude-sonnet-5-5-lo` | Claude Sonnet 5.5 (Low) | 15m |
+| `claude-sonnet-5-5-med` | Claude Sonnet 5.5 (Medium) | 15m |
+| `claude-sonnet-5-5-hi` | Claude Sonnet 5.5 (High) | 15m |
+
+### Claude Opus 5.5
+
+| Tier | Display name | Default timeout |
+| --- | --- | --- |
+| `claude-opus-5-5-lo` | Claude Opus 5.5 (Low) | 15m |
+| `claude-opus-5-5-med` | Claude Opus 5.5 (Medium) | 15m |
+| `claude-opus-5-5-hi` | Claude Opus 5.5 (High) | 15m |
+
+### Gemini 4 Argon
+
+| Tier | Display name | Default timeout |
+| --- | --- | --- |
+| `argon-4-lo` | Gemini 4 Argon (Low) | 15m |
+| `argon-4-med` | Gemini 4 Argon (Medium) | 15m |
+| `argon-4-hi` | Gemini 4 Argon (High) | 15m |
+
+Availability: `flash-3.8-*` and `claude-*-5-5-*` tiers work on both Pro and Ultra accounts. `argon-4-*` is Ultra-only today (Pro may unlock it later); on a Pro account these tiers fail with `MODEL_NOT_FOUND`.
+
+### Dropped tiers
+
+`flash-3.6-*`, `flash-3.7-*`, and `pro-3.1-*` were dropped in favor of the twelve tiers above (Enterprise-only upstream). They have no aliases and return `INVALID_TIER`.
 
 ### Migrating from v0.9.x
 
@@ -271,7 +279,7 @@ To analyze a local file (PDF, PNG, image, or any binary agy's MCP tools can read
 ```json
 {
   "prompt": "Read this PDF and extract every line item into a markdown table.",
-  "tier": "flash-3.6-lo",
+  "tier": "flash-3.8-lo",
   "dir": "/path/to/the/files/parent/directory",
   "yolo": true,
   "sandbox": true
@@ -292,10 +300,10 @@ After setup, you can invoke agy directly from the OpenCode TUI prompt:
 
 ```
 /agy write a full test suite for src/utils/math.ts
-/agy --tier pro-3.1-hi --sandbox "scaffold the reports module"
-/agy --tier pro-3.1-hi --timeout 30m "merge feature/auth into main and resolve conflicts"
+/agy --tier claude-sonnet-5-5-hi --sandbox "scaffold the reports module"
+/agy --tier claude-opus-5-5-hi --timeout 30m "merge feature/auth into main and resolve conflicts"
 /agy --continue "finish the previous task and add docs"
-/agy --tier flash-3.6-lo --yolo --dir /path/to/dir "summarize report.pdf"
+/agy --tier flash-3.8-lo --yolo --dir /path/to/dir "summarize report.pdf"
 ```
 
 Use `sandbox: true` for safer isolation when the task does not need full shell access. Use `yolo: true` only for deliberate, reviewed branch or worktree work. The main agent still owns verification, diff review, and any follow-up fixes.

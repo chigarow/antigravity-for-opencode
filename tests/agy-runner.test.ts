@@ -46,49 +46,52 @@ function createFakeProc({
 }
 
 describe("buildAgyArgs", () => {
-  test("defaults to flash-3.8-med tier and 10m timeout", () => {
+  test("defaults to flash-3.8-med tier and 15m timeout", () => {
     const args = buildAgyArgs({ prompt: "do something" });
     expect(args).toContain("--model");
     expect(args).toContain("Gemini 3.8 Flash (Medium)");
     expect(args).toContain("--print-timeout");
-    expect(args).toContain("10m");
+    expect(args).toContain("15m");
     expect(args).toContain("-p");
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps all eleven versioned tiers correctly", () => {
+  test("maps all twelve versioned tiers correctly", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.8-hi" })).toContain(
       "Gemini 3.8 Flash (High)"
-    );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.8-lo" })).toContain(
-      "Gemini 3.8 Flash (Low)"
     );
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.8-med" })).toContain(
       "Gemini 3.8 Flash (Medium)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi" })).toContain(
-      "Gemini 3.1 Pro (High)"
+    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.8-lo" })).toContain(
+      "Gemini 3.8 Flash (Low)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "pro-3.1-lo" })).toContain(
-      "Gemini 3.1 Pro (Low)"
+    expect(buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-hi" })).toContain(
+      "Claude Sonnet 5.5 (High)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" })).toContain(
-      "Gemini 3.6 Flash (High)"
+    expect(buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-med" })).toContain(
+      "Claude Sonnet 5.5 (Medium)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" })).toContain(
-      "Gemini 3.6 Flash (Medium)"
+    expect(buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-lo" })).toContain(
+      "Claude Sonnet 5.5 (Low)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" })).toContain(
-      "Gemini 3.6 Flash (Low)"
+    expect(buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-hi" })).toContain(
+      "Claude Opus 5.5 (High)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.7-hi" })).toContain(
-      "Gemini 3.7 Flash (High)"
+    expect(buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-med" })).toContain(
+      "Claude Opus 5.5 (Medium)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.7-med" })).toContain(
-      "Gemini 3.7 Flash (Medium)"
+    expect(buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-lo" })).toContain(
+      "Claude Opus 5.5 (Low)"
     );
-    expect(buildAgyArgs({ prompt: "x", tier: "flash-3.7-lo" })).toContain(
-      "Gemini 3.7 Flash (Low)"
+    expect(buildAgyArgs({ prompt: "x", tier: "argon-4-hi" })).toContain(
+      "Gemini 4 Argon (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "argon-4-med" })).toContain(
+      "Gemini 4 Argon (Medium)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "argon-4-lo" })).toContain(
+      "Gemini 4 Argon (Low)"
     );
   });
 
@@ -160,152 +163,133 @@ describe("buildAgyArgs", () => {
     expect(args[pIndex + 1]).toBe("final task here");
   });
 
-  // ---- tier-aware defaults + 4h cap ----
+  // ---- uniform tier default timeout (15m) + explicit override ----
 
-  test("pro-3.1-hi tier with no explicit timeout defaults to 15m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi" });
+  test("claude-opus-5-5-hi tier with no explicit timeout defaults to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-hi" });
     expect(args).toContain("15m");
   });
 
-  test("pro-3.1-hi tier with explicit timeout uses the explicit value, not the tier default", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi", timeout: "5m" });
+  test("claude-opus-5-5-hi tier with explicit timeout uses the explicit value, not the tier default", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-hi", timeout: "5m" });
     expect(args).toContain("5m");
     expect(args).not.toContain("15m");
   });
 
-  // ---- flash-3.6-hi + timeout matrix + model override (TDD RED) ----
+  // ---- claude-sonnet-5-5 family: mapping, 15m default, distinctness ----
 
-  test("flash-3.6-hi maps to Gemini 3.6 Flash (High) and defaults timeout to 10m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" });
-    expect(args).toContain("Gemini 3.6 Flash (High)");
-    expect(args).toContain("10m");
+  test("claude-sonnet-5-5-hi maps to Claude Sonnet 5.5 (High) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-hi" });
+    expect(args).toContain("Claude Sonnet 5.5 (High)");
+    expect(args).toContain("15m");
   });
 
-  test("flash-3.6-lo maps to Gemini 3.6 Flash (Low) and defaults timeout to 10m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
-    expect(args).toContain("Gemini 3.6 Flash (Low)");
-    expect(args).toContain("10m");
+  test("claude-sonnet-5-5-lo maps to Claude Sonnet 5.5 (Low) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-lo" });
+    expect(args).toContain("Claude Sonnet 5.5 (Low)");
+    expect(args).toContain("15m");
   });
 
-  test("flash-3.6-lo is distinct from flash-3.6-hi (different model strings)", () => {
-    const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" });
-    expect(loArgs).toContain("Gemini 3.6 Flash (Low)");
-    expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
-    expect(loArgs).not.toContain("Gemini 3.6 Flash (High)");
-    expect(hiArgs).not.toContain("Gemini 3.6 Flash (Low)");
+  test("claude-sonnet-5-5-lo is distinct from claude-sonnet-5-5-hi (different model strings)", () => {
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-lo" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-hi" });
+    expect(loArgs).toContain("Claude Sonnet 5.5 (Low)");
+    expect(hiArgs).toContain("Claude Sonnet 5.5 (High)");
+    expect(loArgs).not.toContain("Claude Sonnet 5.5 (High)");
+    expect(hiArgs).not.toContain("Claude Sonnet 5.5 (Low)");
   });
 
-  test("flash-3.6-med maps to Gemini 3.6 Flash (Medium) and defaults timeout to 10m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" });
-    expect(args).toContain("Gemini 3.6 Flash (Medium)");
-    expect(args).toContain("10m");
-    // Pairing: explicit flash-3.6-med stays 3.6 while the omitted tier defaults to 3.8
+  test("claude-sonnet-5-5-med maps to Claude Sonnet 5.5 (Medium) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-med" });
+    expect(args).toContain("Claude Sonnet 5.5 (Medium)");
+    expect(args).toContain("15m");
+    // Pairing: explicit claude-sonnet-5-5-med stays Sonnet while the omitted tier defaults to 3.8 Flash
     const omittedArgs = buildAgyArgs({ prompt: "x" });
     expect(omittedArgs).toContain("Gemini 3.8 Flash (Medium)");
-    expect(omittedArgs).not.toContain("Gemini 3.6 Flash (Medium)");
+    expect(omittedArgs).not.toContain("Claude Sonnet 5.5 (Medium)");
   });
 
-  test("flash-3.6-med is distinct from flash-3.6-hi and flash-3.6-lo", () => {
-    const medArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-med" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-hi" });
-    const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.6-lo" });
-    expect(medArgs).toContain("Gemini 3.6 Flash (Medium)");
-    expect(hiArgs).toContain("Gemini 3.6 Flash (High)");
-    expect(loArgs).toContain("Gemini 3.6 Flash (Low)");
-    expect(medArgs).not.toContain("Gemini 3.6 Flash (High)");
-    expect(medArgs).not.toContain("Gemini 3.6 Flash (Low)");
-    expect(hiArgs).not.toContain("Gemini 3.6 Flash (Medium)");
-    expect(loArgs).not.toContain("Gemini 3.6 Flash (Medium)");
+  test("claude-sonnet-5-5-med is distinct from claude-sonnet-5-5-hi and claude-sonnet-5-5-lo", () => {
+    const medArgs = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-med" });
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-hi" });
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "claude-sonnet-5-5-lo" });
+    expect(medArgs).toContain("Claude Sonnet 5.5 (Medium)");
+    expect(hiArgs).toContain("Claude Sonnet 5.5 (High)");
+    expect(loArgs).toContain("Claude Sonnet 5.5 (Low)");
+    expect(medArgs).not.toContain("Claude Sonnet 5.5 (High)");
+    expect(medArgs).not.toContain("Claude Sonnet 5.5 (Low)");
+    expect(hiArgs).not.toContain("Claude Sonnet 5.5 (Medium)");
+    expect(loArgs).not.toContain("Claude Sonnet 5.5 (Medium)");
   });
 
-  // ---- flash-3.7 family: mapping, 10m default, distinctness, overrides (TDD RED) ----
+  // ---- claude-opus-5-5 family: mapping, 15m default, distinctness, overrides ----
 
-  test("flash-3.7-hi maps to Gemini 3.7 Flash (High) and defaults timeout to 10m", () => {
-    // Given: the new Gemini 3.7 Flash (High) tier
-    // When: buildAgyArgs runs without an explicit timeout
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-hi" });
-    // Then: the frozen display name and the Flash-family 10m default are emitted
-    expect(args).toContain("Gemini 3.7 Flash (High)");
-    expect(args).toContain("10m");
+  test("claude-opus-5-5-hi maps to Claude Opus 5.5 (High) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-hi" });
+    expect(args).toContain("Claude Opus 5.5 (High)");
+    expect(args).toContain("15m");
   });
 
-  test("flash-3.7-med maps to Gemini 3.7 Flash (Medium) and defaults timeout to 10m", () => {
-    // Given: the new Gemini 3.7 Flash (Medium) tier
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-med" });
-    // When / Then: display name and 10m default
-    expect(args).toContain("Gemini 3.7 Flash (Medium)");
-    expect(args).toContain("10m");
+  test("claude-opus-5-5-med maps to Claude Opus 5.5 (Medium) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-med" });
+    expect(args).toContain("Claude Opus 5.5 (Medium)");
+    expect(args).toContain("15m");
   });
 
-  test("flash-3.7-lo maps to Gemini 3.7 Flash (Low) and defaults timeout to 10m", () => {
-    // Given: the new Gemini 3.7 Flash (Low) tier
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-lo" });
-    // When / Then: display name and 10m default
-    expect(args).toContain("Gemini 3.7 Flash (Low)");
-    expect(args).toContain("10m");
+  test("claude-opus-5-5-lo maps to Claude Opus 5.5 (Low) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-lo" });
+    expect(args).toContain("Claude Opus 5.5 (Low)");
+    expect(args).toContain("15m");
   });
 
-  test("flash-3.7 tiers are pairwise distinct (hi, med, lo map to different display names)", () => {
-    // Given: all three 3.7 tiers
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.7-hi" });
-    const medArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.7-med" });
-    const loArgs = buildAgyArgs({ prompt: "x", tier: "flash-3.7-lo" });
-    // When / Then: each emits its own display name and never another 3.7 name
-    expect(hiArgs).toContain("Gemini 3.7 Flash (High)");
-    expect(medArgs).toContain("Gemini 3.7 Flash (Medium)");
-    expect(loArgs).toContain("Gemini 3.7 Flash (Low)");
-    expect(hiArgs).not.toContain("Gemini 3.7 Flash (Medium)");
-    expect(hiArgs).not.toContain("Gemini 3.7 Flash (Low)");
-    expect(medArgs).not.toContain("Gemini 3.7 Flash (High)");
-    expect(medArgs).not.toContain("Gemini 3.7 Flash (Low)");
-    expect(loArgs).not.toContain("Gemini 3.7 Flash (High)");
-    expect(loArgs).not.toContain("Gemini 3.7 Flash (Medium)");
+  test("claude-opus-5-5 tiers are pairwise distinct (hi, med, lo map to different display names)", () => {
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-hi" });
+    const medArgs = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-med" });
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-lo" });
+    expect(hiArgs).toContain("Claude Opus 5.5 (High)");
+    expect(medArgs).toContain("Claude Opus 5.5 (Medium)");
+    expect(loArgs).toContain("Claude Opus 5.5 (Low)");
+    expect(hiArgs).not.toContain("Claude Opus 5.5 (Medium)");
+    expect(hiArgs).not.toContain("Claude Opus 5.5 (Low)");
+    expect(medArgs).not.toContain("Claude Opus 5.5 (High)");
+    expect(medArgs).not.toContain("Claude Opus 5.5 (Low)");
+    expect(loArgs).not.toContain("Claude Opus 5.5 (High)");
+    expect(loArgs).not.toContain("Claude Opus 5.5 (Medium)");
   });
 
-  test("model override wins for flash-3.7-hi when both model and tier are set", () => {
-    // Given: a 3.7 tier combined with an explicit exact model override
+  test("model override wins for claude-opus-5-5-hi when both model and tier are set", () => {
     const args = buildAgyArgs({
       prompt: "x",
-      tier: "flash-3.7-hi",
-      model: "Custom 3.7 High Override",
+      tier: "claude-opus-5-5-hi",
+      model: "Custom Opus High Override",
     });
-    // Then: the explicit model is emitted, the tier display name is not
-    expect(args).toContain("Custom 3.7 High Override");
-    expect(args).not.toContain("Gemini 3.7 Flash (High)");
+    expect(args).toContain("Custom Opus High Override");
+    expect(args).not.toContain("Claude Opus 5.5 (High)");
   });
 
-  test("flash-3.7-med with explicit timeout uses the explicit value, not the 10m default", () => {
-    // Given: a 3.7 tier with an explicit timeout
-    const args = buildAgyArgs({ prompt: "x", tier: "flash-3.7-med", timeout: "5m" });
-    // Then: the explicit timeout wins over the tier default
+  test("claude-opus-5-5-med with explicit timeout uses the explicit value, not the 15m default", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "claude-opus-5-5-med", timeout: "5m" });
     expect(args).toContain("5m");
-    expect(args).not.toContain("10m");
+    expect(args).not.toContain("15m");
   });
 
-  test("flash-3.8-lo defaults timeout to 10m", () => {
+  test("flash-3.8-lo defaults timeout to 15m", () => {
     const args = buildAgyArgs({ prompt: "x", tier: "flash-3.8-lo" });
     expect(args).toContain("Gemini 3.8 Flash (Low)");
-    expect(args).toContain("10m");
+    expect(args).toContain("15m");
   });
 
-  test("flash-3.8-hi defaults timeout to 10m when tier is explicit", () => {
+  test("flash-3.8-hi defaults timeout to 15m when tier is explicit", () => {
     const args = buildAgyArgs({ prompt: "x", tier: "flash-3.8-hi" });
     expect(args).toContain("Gemini 3.8 Flash (High)");
-    expect(args).toContain("10m");
+    expect(args).toContain("15m");
   });
 
-  // ---- flash-3.8-med + pro-3.1-lo tiers ----
+  // ---- flash-3.8-med default tier ----
 
-  test("flash-3.8-med maps to Gemini 3.8 Flash (Medium) and defaults timeout to 10m", () => {
+  test("flash-3.8-med maps to Gemini 3.8 Flash (Medium) and defaults timeout to 15m", () => {
     const args = buildAgyArgs({ prompt: "x", tier: "flash-3.8-med" });
     expect(args).toContain("Gemini 3.8 Flash (Medium)");
-    expect(args).toContain("10m");
-  });
-
-  test("pro-3.1-lo maps to Gemini 3.1 Pro (Low) and defaults timeout to 15m", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1-lo" });
-    expect(args).toContain("Gemini 3.1 Pro (Low)");
     expect(args).toContain("15m");
   });
 
@@ -322,29 +306,52 @@ describe("buildAgyArgs", () => {
     expect(loArgs).not.toContain("Gemini 3.8 Flash (Medium)");
   });
 
-  test("pro-3.1-lo is distinct from pro-3.1-hi", () => {
-    const loArgs = buildAgyArgs({ prompt: "x", tier: "pro-3.1-lo" });
-    const hiArgs = buildAgyArgs({ prompt: "x", tier: "pro-3.1-hi" });
-    expect(loArgs).toContain("Gemini 3.1 Pro (Low)");
-    expect(hiArgs).toContain("Gemini 3.1 Pro (High)");
-    expect(loArgs).not.toContain("Gemini 3.1 Pro (High)");
-    expect(hiArgs).not.toContain("Gemini 3.1 Pro (Low)");
+  // ---- argon-4 family: mapping, 15m default, distinctness, overrides (Ultra-only upstream) ----
+
+  test("argon-4-hi maps to Gemini 4 Argon (High) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "argon-4-hi" });
+    expect(args).toContain("Gemini 4 Argon (High)");
+    expect(args).toContain("15m");
   });
 
-  test("pro-3.1-lo with explicit timeout uses the explicit value, not the 15m default", () => {
-    const args = buildAgyArgs({ prompt: "x", tier: "pro-3.1-lo", timeout: "5m" });
+  test("argon-4-med maps to Gemini 4 Argon (Medium) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "argon-4-med" });
+    expect(args).toContain("Gemini 4 Argon (Medium)");
+    expect(args).toContain("15m");
+  });
+
+  test("argon-4-lo maps to Gemini 4 Argon (Low) and defaults timeout to 15m", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "argon-4-lo" });
+    expect(args).toContain("Gemini 4 Argon (Low)");
+    expect(args).toContain("15m");
+  });
+
+  test("argon-4 tiers are pairwise distinct", () => {
+    const hiArgs = buildAgyArgs({ prompt: "x", tier: "argon-4-hi" });
+    const medArgs = buildAgyArgs({ prompt: "x", tier: "argon-4-med" });
+    const loArgs = buildAgyArgs({ prompt: "x", tier: "argon-4-lo" });
+    expect(hiArgs).toContain("Gemini 4 Argon (High)");
+    expect(medArgs).toContain("Gemini 4 Argon (Medium)");
+    expect(loArgs).toContain("Gemini 4 Argon (Low)");
+    expect(hiArgs).not.toContain("Gemini 4 Argon (Medium)");
+    expect(medArgs).not.toContain("Gemini 4 Argon (High)");
+    expect(loArgs).not.toContain("Gemini 4 Argon (High)");
+  });
+
+  test("argon-4-lo with explicit timeout uses the explicit value, not the 15m default", () => {
+    const args = buildAgyArgs({ prompt: "x", tier: "argon-4-lo", timeout: "5m" });
     expect(args).toContain("5m");
     expect(args).not.toContain("15m");
   });
 
-  test("model override wins for pro-3.1-lo when both model and tier are set", () => {
+  test("model override wins for argon-4-lo when both model and tier are set", () => {
     const args = buildAgyArgs({
       prompt: "x",
-      tier: "pro-3.1-lo",
-      model: "Custom Pro Low Override",
+      tier: "argon-4-lo",
+      model: "Custom Argon Low Override",
     });
-    expect(args).toContain("Custom Pro Low Override");
-    expect(args).not.toContain("Gemini 3.1 Pro (Low)");
+    expect(args).toContain("Custom Argon Low Override");
+    expect(args).not.toContain("Gemini 4 Argon (Low)");
   });
 
   test("model override wins when both model and tier are set", () => {
@@ -391,6 +398,29 @@ describe("buildAgyArgs", () => {
 
   test.each(["flash-3.5-hi", "flash-3.5-med", "flash-3.5-lo"])(
     "throws INVALID_TIER for removed Gemini 3.5 tier name %s",
+    (removedTier) => {
+      try {
+        buildAgyArgs({ prompt: "x", tier: removedTier as any });
+        throw new Error("expected AgyError");
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(AgyError);
+        expect(e.code).toBe("INVALID_TIER");
+      }
+    }
+  );
+
+  test.each([
+    "pro-3.1-hi",
+    "pro-3.1-lo",
+    "flash-3.6-hi",
+    "flash-3.6-med",
+    "flash-3.6-lo",
+    "flash-3.7-hi",
+    "flash-3.7-med",
+    "flash-3.7-lo",
+    "gpt-oss-120b-medium",
+  ])(
+    "throws INVALID_TIER for removed tier name %s (no alias shims)",
     (removedTier) => {
       try {
         buildAgyArgs({ prompt: "x", tier: removedTier as any });
@@ -548,6 +578,60 @@ describe("runAgy (injected spawn)", () => {
     }
   });
 
+  test("classifies exit-1 unknown model as MODEL_NOT_FOUND with Ultra hint for Argon", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: 'model "Gemini 4 Argon (High)" is not recognized as a known model',
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "argon test" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("MODEL_NOT_FOUND");
+      expect(String(e.details?.hint)).toContain("Ultra");
+    }
+  });
+
+  test("classifies exit-1 unknown model with available-models list as MODEL_NOT_FOUND", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: 'Unknown model "Gemini 3.7 Flash (High)". Available models: Gemini 3.8 Flash (Medium)',
+        exitCode: 1,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "removed model" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e.code).toBe("MODEL_NOT_FOUND");
+      expect(typeof e.details?.hint).toBe("string");
+      expect(e.details?.exitCode).toBe(1);
+    }
+  });
+
+  test("classifies exit-3 AGY_ERROR JSON line as MODEL_NOT_FOUND", async () => {
+    const fakeSpawn: SpawnFn = (() =>
+      createFakeProc({
+        stdout: "",
+        stderr: 'AGY_ERROR {"type":"AGY_ERROR","message":"model not allowed for account","available models":["Gemini 3.8 Flash (Medium)"]}',
+        exitCode: 3,
+      })) as any;
+
+    try {
+      await runAgy({ prompt: "json error" }, fakeSpawn);
+      throw new Error("expected AgyError");
+    } catch (e: any) {
+      expect(e).toBeInstanceOf(AgyError);
+      expect(e.code).toBe("MODEL_NOT_FOUND");
+      expect(e.details?.exitCode).toBe(3);
+    }
+  });
+
   test("classifies timeout error and surfaces explicit timeout in details", async () => {
     const fakeSpawn: SpawnFn = (() =>
       createFakeProc({
@@ -564,7 +648,7 @@ describe("runAgy (injected spawn)", () => {
     }
   });
 
-  test("classifies timeout error and surfaces default timeout (10m) in details", async () => {
+  test("classifies timeout error and surfaces default timeout (15m) in details", async () => {
     const fakeSpawn: SpawnFn = (() =>
       createFakeProc({
         stdout: "",
@@ -576,7 +660,7 @@ describe("runAgy (injected spawn)", () => {
       await runAgy({ prompt: "slow" }, fakeSpawn);
     } catch (e: any) {
       expect(e.code).toBe("TIMEOUT");
-      expect(e.details?.timeout).toBe("10m");
+      expect(e.details?.timeout).toBe("15m");
     }
   });
 
@@ -866,12 +950,12 @@ describe("runAgy (injected spawn)", () => {
       // Pure exit-code branch — nothing on stderr.
       expect(e.code).toBe("TIMEOUT");
       expect(e.details?.exitCode).toBe(124);
-      // 10m default (flash-3.8-med tier, no explicit timeout).
-      expect(e.details?.timeout).toBe("10m");
+      // 15m uniform default (flash-3.8-med tier, no explicit timeout).
+      expect(e.details?.timeout).toBe("15m");
       expect(typeof e.details?.durationMs).toBe("number");
       expect(e.details.durationMs).toBeGreaterThanOrEqual(7 * 60 * 1000 - 1000);
-      // Heuristic: max(7m*1.5=11m→11m, 10m*2=20m, 15m) = 20m.
-      expect(e.details.suggestedNextTimeout).toBe("20m");
+      // Heuristic: max(7m*1.5=11m, 15m*2=30m, 15m) = 30m.
+      expect(e.details.suggestedNextTimeout).toBe("30m");
     }
   });
 
@@ -972,7 +1056,7 @@ describe("runAgy (injected spawn)", () => {
     }
   });
 
-  test("AGY_FAILED error echoes the default timeout (10m) when no explicit timeout is passed", async () => {
+  test("AGY_FAILED error echoes the default timeout (15m) when no explicit timeout is passed", async () => {
     const fakeSpawn: SpawnFn = (() =>
       createFakeProc({
         stdout: "",
@@ -985,7 +1069,7 @@ describe("runAgy (injected spawn)", () => {
       throw new Error("expected AgyError");
     } catch (e: any) {
       expect(e.code).toBe("AGY_FAILED");
-      expect(e.details?.timeout).toBe("10m");
+      expect(e.details?.timeout).toBe("15m");
     }
   });
 

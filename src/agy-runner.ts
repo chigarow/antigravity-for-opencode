@@ -3,7 +3,19 @@ import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "os";
 import path from "node:path";
 
-export type Tier = "flash-3.8-hi" | "flash-3.8-lo" | "flash-3.8-med" | "pro-3.1-hi" | "pro-3.1-lo" | "flash-3.6-hi" | "flash-3.6-med" | "flash-3.6-lo" | "flash-3.7-hi" | "flash-3.7-med" | "flash-3.7-lo";
+export type Tier =
+  | "flash-3.8-hi"
+  | "flash-3.8-med"
+  | "flash-3.8-lo"
+  | "claude-sonnet-5-5-hi"
+  | "claude-sonnet-5-5-med"
+  | "claude-sonnet-5-5-lo"
+  | "claude-opus-5-5-hi"
+  | "claude-opus-5-5-med"
+  | "claude-opus-5-5-lo"
+  | "argon-4-hi"
+  | "argon-4-med"
+  | "argon-4-lo";
 
 export interface AgyOptions {
   prompt: string;
@@ -48,16 +60,17 @@ export class AgyError extends Error {
 
 const TIER_MODEL: Record<Tier, string> = {
   "flash-3.8-hi": "Gemini 3.8 Flash (High)",
-  "flash-3.8-lo": "Gemini 3.8 Flash (Low)",
   "flash-3.8-med": "Gemini 3.8 Flash (Medium)",
-  "pro-3.1-hi": "Gemini 3.1 Pro (High)",
-  "pro-3.1-lo": "Gemini 3.1 Pro (Low)",
-  "flash-3.6-hi": "Gemini 3.6 Flash (High)",
-  "flash-3.6-med": "Gemini 3.6 Flash (Medium)",
-  "flash-3.6-lo": "Gemini 3.6 Flash (Low)",
-  "flash-3.7-hi": "Gemini 3.7 Flash (High)",
-  "flash-3.7-med": "Gemini 3.7 Flash (Medium)",
-  "flash-3.7-lo": "Gemini 3.7 Flash (Low)",
+  "flash-3.8-lo": "Gemini 3.8 Flash (Low)",
+  "claude-sonnet-5-5-hi": "Claude Sonnet 5.5 (High)",
+  "claude-sonnet-5-5-med": "Claude Sonnet 5.5 (Medium)",
+  "claude-sonnet-5-5-lo": "Claude Sonnet 5.5 (Low)",
+  "claude-opus-5-5-hi": "Claude Opus 5.5 (High)",
+  "claude-opus-5-5-med": "Claude Opus 5.5 (Medium)",
+  "claude-opus-5-5-lo": "Claude Opus 5.5 (Low)",
+  "argon-4-hi": "Gemini 4 Argon (High)",
+  "argon-4-med": "Gemini 4 Argon (Medium)",
+  "argon-4-lo": "Gemini 4 Argon (Low)",
 };
 
 /**
@@ -71,12 +84,11 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 /**
  * Normalize timeout input to a string agy understands (e.g. "5m", "300s", "4h").
  *
- * Tier-aware default when no explicit timeout is provided:
- *  - tier === "pro-3.1-hi" || tier === "pro-3.1-lo"  → "15m"  (Pro family: heavier work, longer default)
- *  - any other tier                                → "10m"  (flash-3.8-hi, flash-3.8-lo, flash-3.8-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, flash-3.7-lo, or unspecified)
+ * Uniform default when no explicit timeout is provided: "15m" for every
+ * tier (all 12 tiers share one default; no per-tier branching).
  *
  * Accepts:
- *  - undefined / null            → tier-aware default
+ *  - undefined / null            → "15m"
  *  - number (treated as ms)      → coerced (300000 → "5m", 60000 → "1m")
  *  - string of digits only       → coerced as ms
  *  - duration string ("5m", "10m", "300s", "1h", …) → passed through
@@ -94,8 +106,8 @@ const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
  * classification, not as INVALID_TIMEOUT, so user-facing surface stays
  * stable.
  */
-function normalizeTimeout(t: string | number | undefined, tier: Tier = "flash-3.8-med"): string {
-  if (t == null) return tier === "pro-3.1-hi" || tier === "pro-3.1-lo" ? "15m" : "10m";
+function normalizeTimeout(t: string | number | undefined): string {
+  if (t == null) return "15m";
 
   // Validate + coerce. The cap is applied uniformly to whatever this
   // returns so a 999_999_999 numeric input is clamped to "4h" the same
@@ -326,7 +338,7 @@ export function buildAgyArgs(opts: AgyOptions): string[] {
     throw new AgyError("pass either continue or conversation, not both", "INVALID_ARGS");
   }
 
-  const timeout = normalizeTimeout(opts.timeout, opts.tier);
+  const timeout = normalizeTimeout(opts.timeout);
 
   const args: string[] = [
     "--model",
@@ -526,6 +538,23 @@ function classifyError(stderr: string, exitCode: number): AgyError | null {
   }
   if (blob.includes("timed out") || blob.includes("deadline exceeded") || blob.includes("print-timeout")) {
     return new AgyError("agy print timeout", "TIMEOUT", { exitCode });
+  }
+  if (
+    blob.includes("is not recognized as a known model") ||
+    blob.includes("available models") ||
+    blob.includes("agy_error")
+  ) {
+    const ultraOnly = blob.includes("argon");
+    return new AgyError(
+      "agy model not found — requested model is unavailable for this account",
+      "MODEL_NOT_FOUND",
+      {
+        exitCode,
+        hint: ultraOnly
+          ? "Argon 4 tiers require the Ultra plan (plan is resolved server-side from the signed-in account; upgrade or pick another tier)"
+          : "model requires a higher account plan (Pro/Ultra) or was removed upstream; run `agy models` to list the models this account may use",
+      }
+    );
   }
   if (blob.includes("command not found") || blob.includes("agy: not found") || blob.includes("enoent")) {
     return new AgyError("agy CLI not found on PATH", "AGY_NOT_FOUND", { exitCode });

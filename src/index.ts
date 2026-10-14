@@ -107,9 +107,9 @@ const v1Server: Plugin = async (ctx) => {
             .describe("The task to send to agy/Gemini. Be specific and scoped."),
 
           tier: tool.schema
-            .enum(["flash-3.8-hi", "flash-3.8-lo", "flash-3.8-med", "pro-3.1-hi", "pro-3.1-lo", "flash-3.6-hi", "flash-3.6-med", "flash-3.6-lo", "flash-3.7-hi", "flash-3.7-med", "flash-3.7-lo"])
+            .enum(["flash-3.8-hi", "flash-3.8-med", "flash-3.8-lo", "claude-sonnet-5-5-hi", "claude-sonnet-5-5-med", "claude-sonnet-5-5-lo", "claude-opus-5-5-hi", "claude-opus-5-5-med", "claude-opus-5-5-lo", "argon-4-hi", "argon-4-med", "argon-4-lo"])
             .optional()
-            .describe("Model tier. flash-3.8-med (default) = Gemini 3.8 Flash Medium, flash-3.8-hi = newest fast flash model, flash-3.8-lo = cheapest, flash-3.6-med = Gemini 3.6 Flash Medium, flash-3.6-hi = Gemini 3.6 Flash High, flash-3.6-lo = cheapest 3.6 option, flash-3.7-hi = Gemini 3.7 Flash High, flash-3.7-med = Gemini 3.7 Flash Medium, flash-3.7-lo = cheapest 3.7 option, pro-3.1-hi = stronger Gemini 3.1 Pro, pro-3.1-lo = Gemini 3.1 Pro (Low). Gemini 3.5 Flash tiers were removed upstream."),
+            .describe("Model tier. flash-3.8-med (default) = Gemini 3.8 Flash Medium (works on every account). flash-3.8-hi = Gemini 3.8 Flash High, flash-3.8-lo = cheapest Flash. claude-sonnet-5-5-hi/med/lo = Claude Sonnet 5.5 (requires a Pro or Ultra plan). claude-opus-5-5-hi/med/lo = Claude Opus 5.5 (requires a Pro or Ultra plan). argon-4-hi/med/lo = Gemini 4 Argon (Ultra plan only). Gemini 3.6/3.7 Flash and 3.1 Pro tiers were removed upstream (Enterprise-only) and now return INVALID_TIER."),
 
           dir: tool.schema
             .string()
@@ -128,9 +128,9 @@ const v1Server: Plugin = async (ctx) => {
             .describe(
               "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or raw milliseconds (e.g. 300000 or 600000). " +
               "Numbers/strings of digits are normalized to proper duration (300000 → '5m'). " +
-              "Default depends on tier: 'pro-3.1-hi' and 'pro-3.1-lo' default to '15m' (heavier work); flash-3.8-hi/flash-3.8-lo/flash-3.8-med/flash-3.6-hi/flash-3.6-med/flash-3.6-lo/flash-3.7-hi/flash-3.7-med/flash-3.7-lo default to '10m'. " +
+              "Default: '15m' for every tier. " +
               "Hard upper bound: any value above 4h is silently clamped to '4h'. " +
-              "For long tasks (big merges, heavy refactors) use '15m' or '30m' and/or tier=pro-3.1-hi."
+              "For long tasks (big merges, heavy refactors) use '15m' or '30m'."
             ),
 
           yolo: tool.schema

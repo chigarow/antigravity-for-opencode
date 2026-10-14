@@ -2,12 +2,12 @@
 #
 # agy-delegate.sh — standalone wrapper around the Antigravity CLI (`agy`).
 # Matches the behavior of the opencode-agy plugin, with the same review and safety caveats.
-# Supports versioned tiers: flash-3.8-hi, flash-3.8-lo, flash-3.8-med (default), pro-3.1-hi, pro-3.1-lo, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, and flash-3.7-lo.
-# Timeout defaults are 10m for flash-3.8-hi, flash-3.8-lo, flash-3.8-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, and flash-3.7-lo; pro-3.1-hi and pro-3.1-lo use 15m.
+# Supports 12 versioned tiers: flash-3.8-hi, flash-3.8-med, flash-3.8-lo, claude-sonnet-5-5-hi, claude-sonnet-5-5-med, claude-sonnet-5-5-lo, claude-opus-5-5-hi, claude-opus-5-5-med, claude-opus-5-5-lo, argon-4-hi, argon-4-med, and argon-4-lo (default: flash-3.8-med).
+# Timeout default is 15m for every tier (hard cap 4h).
 #
 # Usage examples:
 #   ./scripts/agy-delegate.sh --project . "implement the feature"
-#   ./scripts/agy-delegate.sh --tier pro-3.1-hi --dir . "review this diff"
+#   ./scripts/agy-delegate.sh --tier claude-opus-5-5-hi --dir . "review this diff"
 #   echo "task" | ./scripts/agy-delegate.sh -
 #
 set -euo pipefail
@@ -33,11 +33,11 @@ Usage: agy-delegate.sh [options] "prompt"
        echo "prompt" | agy-delegate.sh -
 
 Options:
-  -t, --tier <flash-3.8-hi|flash-3.8-lo|flash-3.8-med|pro-3.1-hi|pro-3.1-lo|flash-3.6-hi|flash-3.6-med|flash-3.6-lo|flash-3.7-hi|flash-3.7-med|flash-3.7-lo>
+  -t, --tier <flash-3.8-hi|flash-3.8-med|flash-3.8-lo|claude-sonnet-5-5-hi|claude-sonnet-5-5-med|claude-sonnet-5-5-lo|claude-opus-5-5-hi|claude-opus-5-5-med|claude-opus-5-5-lo|argon-4-hi|argon-4-med|argon-4-lo>
                                       Tier (default: flash-3.8-med)
   -d, --dir <path>                  Add workspace dir
       --project <path>              Wrapper alias for agy's project selection; forwarded to upstream agy
-      --timeout <dur>               e.g. 5m, 10m, 30m (default 10m for flash-3.8-hi, flash-3.8-lo, flash-3.8-med, flash-3.6-hi, flash-3.6-med, flash-3.6-lo, flash-3.7-hi, flash-3.7-med, and flash-3.7-lo; 15m for pro-3.1-hi and pro-3.1-lo; hard cap 4h)
+      --timeout <dur>               e.g. 5m, 10m, 30m (default 15m for all tiers; hard cap 4h)
       --yolo                        --dangerously-skip-permissions; use only for deliberate reviewed branch or worktree work
       --sandbox                     Run with terminal restrictions; safer, but may block merge or filesystem-heavy work
   -c, --continue                    Resume most recent agy conversation
@@ -50,17 +50,18 @@ EOF
 
 model_for_tier() {
   case "$1" in
-    flash-3.8-hi)     echo "Gemini 3.8 Flash (High)" ;;
-    flash-3.8-lo)  echo "Gemini 3.8 Flash (Low)" ;;
+    flash-3.8-hi)  echo "Gemini 3.8 Flash (High)" ;;
     flash-3.8-med) echo "Gemini 3.8 Flash (Medium)" ;;
-    pro-3.1-hi)       echo "Gemini 3.1 Pro (High)" ;;
-    pro-3.1-lo)    echo "Gemini 3.1 Pro (Low)" ;;
-    flash-3.6-hi)     echo "Gemini 3.6 Flash (High)" ;;
-    flash-3.6-med) echo "Gemini 3.6 Flash (Medium)" ;;
-    flash-3.6-lo)  echo "Gemini 3.6 Flash (Low)" ;;
-    flash-3.7-hi)     echo "Gemini 3.7 Flash (High)" ;;
-    flash-3.7-med) echo "Gemini 3.7 Flash (Medium)" ;;
-    flash-3.7-lo)  echo "Gemini 3.7 Flash (Low)" ;;
+    flash-3.8-lo)  echo "Gemini 3.8 Flash (Low)" ;;
+    claude-sonnet-5-5-hi)  echo "Claude Sonnet 5.5 (High)" ;;
+    claude-sonnet-5-5-med) echo "Claude Sonnet 5.5 (Medium)" ;;
+    claude-sonnet-5-5-lo)  echo "Claude Sonnet 5.5 (Low)" ;;
+    claude-opus-5-5-hi)  echo "Claude Opus 5.5 (High)" ;;
+    claude-opus-5-5-med) echo "Claude Opus 5.5 (Medium)" ;;
+    claude-opus-5-5-lo)  echo "Claude Opus 5.5 (Low)" ;;
+    argon-4-hi)  echo "Gemini 4 Argon (High)" ;;
+    argon-4-med) echo "Gemini 4 Argon (Medium)" ;;
+    argon-4-lo)  echo "Gemini 4 Argon (Low)" ;;
     *) die "unknown tier '$1'" ;;
   esac
 }
@@ -87,13 +88,10 @@ done
 [ -n "$PROMPT" ] || die "no prompt"
 command -v agy >/dev/null 2>&1 || die "agy not found on PATH"
 
-# Tier-aware default timeout: Pro family (pro-3.1-hi, pro-3.1-lo) → 15m; all Flash tiers → 10m.
+# Uniform default timeout: 15m for every tier.
 # An explicit --timeout always wins over the tier default.
 if [ "$EXPLICIT_TIMEOUT" -eq 0 ]; then
-  case "$TIER" in
-    pro-3.1-hi|pro-3.1-lo) TIMEOUT="15m" ;;
-    *)                  TIMEOUT="10m" ;;
-  esac
+  TIMEOUT="15m"
 fi
 
 # Always validate tier via model_for_tier (unknown tier dies). Keep explicit --model if set.

@@ -6,19 +6,36 @@ import { z } from "zod";
 
 const LOCKED_TIERS = [
   "flash-3.8-hi",
-  "flash-3.8-lo",
   "flash-3.8-med",
+  "flash-3.8-lo",
+  "claude-sonnet-5-5-hi",
+  "claude-sonnet-5-5-med",
+  "claude-sonnet-5-5-lo",
+  "claude-opus-5-5-hi",
+  "claude-opus-5-5-med",
+  "claude-opus-5-5-lo",
+  "argon-4-hi",
+  "argon-4-med",
+  "argon-4-lo",
+] as const;
+
+const REMOVED_TIERS = [
+  "flash-3.5",
+  "flash-3.5-hi",
+  "flash-3.5-med",
+  "flash-3.5-lo",
+  "pro-3.1",
   "pro-3.1-hi",
   "pro-3.1-lo",
+  "flash-3.6",
   "flash-3.6-hi",
   "flash-3.6-med",
   "flash-3.6-lo",
   "flash-3.7-hi",
   "flash-3.7-med",
   "flash-3.7-lo",
+  "gpt-oss-120b-medium",
 ] as const;
-
-const REMOVED_HIGH = ["flash-3.5", "pro-3.1", "flash-3.6"] as const;
 
 /** Minimal PluginInput stub that satisfies the plugin entry without external deps. */
 function fakeCtx(): PluginInput {
@@ -160,7 +177,7 @@ describe("agy tool tier schema contracts (v0.8.0)", () => {
     return unwrapped.options;
   }
 
-  test("schema accepts exactly the eleven v0.10.0 tiers", async () => {
+  test("schema accepts exactly the twelve v0.11.0 tiers", async () => {
     // Given: real tool schema from plugin registration
     const schema = await tierSchema();
     const values = new Set(enumValues(schema));
@@ -171,16 +188,16 @@ describe("agy tool tier schema contracts (v0.8.0)", () => {
     }
   });
 
-  test("schema rejects removed unsuffixed High names before execution", async () => {
+  test("schema rejects all removed tiers before execution", async () => {
     const schema = await tierSchema();
-    for (const t of REMOVED_HIGH) {
+    for (const t of REMOVED_TIERS) {
       expect(schema.safeParse(t).success).toBe(false);
     }
   });
 
-  test("flash-3.6-med remains valid and undefined (no tier) remains valid", async () => {
+  test("claude-sonnet-5-5-med remains valid and undefined (no tier) remains valid", async () => {
     const schema = await tierSchema();
-    expect(schema.safeParse("flash-3.6-med").success).toBe(true);
+    expect(schema.safeParse("claude-sonnet-5-5-med").success).toBe(true);
     expect(schema.safeParse(undefined).success).toBe(true);
   });
 });

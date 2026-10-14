@@ -35,11 +35,11 @@ describe("real agy integration (headless)", () => {
     }
   }, 30000);
 
-  test.skipIf(!integrationEnabled)("flash-3.7-hi tier returns output or times out gracefully", async () => {
+  test.skipIf(!integrationEnabled)("flash-3.8-med tier returns output or times out gracefully", async () => {
     try {
       const result = await runAgy({
         prompt: "Reply with exactly the word: GEM37_OK and nothing else.",
-        tier: "flash-3.7-hi",
+        tier: "flash-3.8-med",
         timeout: "25s",
       });
 

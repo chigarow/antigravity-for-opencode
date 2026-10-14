@@ -58,7 +58,7 @@ describe("file-grounding integration (adversarial)", () => {
           prompt: `Read the file at ${filePath} and output ONLY the exact token you find, nothing else.`,
           dir: tempDir,
           yolo: true,
-          tier: "flash-3.6-lo",
+          tier: "flash-3.8-lo",
           timeout: "2m",
         });
 
@@ -86,7 +86,7 @@ describe("file-grounding integration (adversarial)", () => {
           dir: tempDir,
           yolo: true,
           sandbox: true,
-          tier: "flash-3.6-lo",
+          tier: "flash-3.8-lo",
           timeout: "2m",
         });
 
@@ -112,7 +112,7 @@ describe("file-grounding integration (adversarial)", () => {
             prompt: `Read the file at ${ghostPath} and output ONLY the exact token you find.`,
             dir: tempDir,
             yolo: true,
-            tier: "flash-3.6-lo",
+            tier: "flash-3.8-lo",
             timeout: "1m",
           });
 
@@ -148,7 +148,7 @@ describe("file-grounding integration (adversarial)", () => {
             dir: tempDir,
             // NO yolo — MCP file-reading tools default to "Ask" permission,
             // which deadlocks in headless --print mode (no TTY to approve).
-            tier: "flash-3.6-lo",
+            tier: "flash-3.8-lo",
             timeout: "30s",
           });
 

@@ -68,30 +68,30 @@ describe("buildAgyToolResult tier reporting", () => {
     expect(result.metadata?.tier).toBe("flash-3.8-med");
   });
 
-  test("explicit tier flash-3.6-med propagates to header, title, and metadata", () => {
-    // Given: buildAgyToolResult called with tier: "flash-3.6-med"
+  test("explicit tier flash-3.8-med propagates to header, title, and metadata", () => {
+    // Given: buildAgyToolResult called with tier: "flash-3.8-med"
     const result = buildAgyToolResult(
-      { prompt: "x", tier: "flash-3.6-med" },
+      { prompt: "x", tier: "flash-3.8-med" },
       fakeResult
     );
 
-    // Then: all three surfaces report flash-3.6-med (explicit tier preserved)
-    expect(result.output).toContain("tier: flash-3.6-med");
-    expect(result.title).toBe("agy (flash-3.6-med)");
-    expect(result.metadata?.tier).toBe("flash-3.6-med");
+    // Then: all three surfaces report flash-3.8-med (explicit tier preserved)
+    expect(result.output).toContain("tier: flash-3.8-med");
+    expect(result.title).toBe("agy (flash-3.8-med)");
+    expect(result.metadata?.tier).toBe("flash-3.8-med");
   });
 
-  test("explicit tier flash-3.6-hi propagates to header, title, and metadata", () => {
-    // Given: buildAgyToolResult called with tier: "flash-3.6-hi"
+  test("explicit tier flash-3.8-hi propagates to header, title, and metadata", () => {
+    // Given: buildAgyToolResult called with tier: "flash-3.8-hi"
     const result = buildAgyToolResult(
-      { prompt: "x", tier: "flash-3.6-hi" },
+      { prompt: "x", tier: "flash-3.8-hi" },
       fakeResult
     );
 
     // Then: all three surfaces reflect the explicit tier
-    expect(result.output).toContain("tier: flash-3.6-hi");
-    expect(result.title).toBe("agy (flash-3.6-hi)");
-    expect(result.metadata?.tier).toBe("flash-3.6-hi");
+    expect(result.output).toContain("tier: flash-3.8-hi");
+    expect(result.title).toBe("agy (flash-3.8-hi)");
+    expect(result.metadata?.tier).toBe("flash-3.8-hi");
   });
 
   test("explicit tier flash-3.8-med propagates to header, title, and metadata", () => {
@@ -104,13 +104,13 @@ describe("buildAgyToolResult tier reporting", () => {
     expect(result.metadata?.tier).toBe("flash-3.8-med");
   });
 
-  test("explicit tier pro-3.1-lo propagates to header, title, and metadata", () => {
+  test("explicit tier claude-sonnet-5-5-lo propagates to header, title, and metadata", () => {
     const result = buildAgyToolResult(
-      { prompt: "x", tier: "pro-3.1-lo" },
+      { prompt: "x", tier: "claude-sonnet-5-5-lo" },
       fakeResult
     );
-    expect(result.output).toContain("tier: pro-3.1-lo");
-    expect(result.title).toBe("agy (pro-3.1-lo)");
-    expect(result.metadata?.tier).toBe("pro-3.1-lo");
+    expect(result.output).toContain("tier: claude-sonnet-5-5-lo");
+    expect(result.title).toBe("agy (claude-sonnet-5-5-lo)");
+    expect(result.metadata?.tier).toBe("claude-sonnet-5-5-lo");
   });
 });
