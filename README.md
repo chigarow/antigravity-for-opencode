@@ -204,8 +204,6 @@ bun run typecheck
 bun run build:all
 ```
 
-`tests/v2-runtime.test.ts` drives the installed OpenCode 2.x binary and is skipped by default; run it with `OPENCODE_SMOKE=1 bun test tests/v2-runtime.test.ts`.
-
 Tests cover argument building and tier mapping, every error path (quota, auth, timeout, not found, empty, truncation), plugin shape (the `agy` tool and `/agy` command register correctly), and real agy integration.
 
 ## Philosophy
