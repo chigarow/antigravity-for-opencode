@@ -4,7 +4,17 @@ import { runAgy, AgyError, type Tier, type AgyResult } from "./agy-runner";
 import { createAgyCommand, isCommandDef } from "./agy-command";
 import { setupV2Plugin, buildAgyV2ToolResult, AGY_V2_TOOL_SCHEMA } from "./agy-v2";
 
-export interface UniversalAgyPlugin extends Plugin {
+/**
+ * Universal plugin definition shared by OpenCode 1.x and 2.x.
+ *
+ * Both loaders require the default export to be a plain object:
+ * - OpenCode 1.17+ calls `server(input)` to build v1 hooks.
+ * - OpenCode 2.x calls `setup(ctx)` (or `effect`) to build v2 hooks.
+ *
+ * A callable default export is rejected by 2.x with
+ * `SchemaError(Expected object at ["default"])`.
+ */
+export interface UniversalAgyPlugin {
   id: string;
   server: Plugin;
   setup: (ctx: any) => Promise<void> | void;
@@ -237,10 +247,11 @@ const v1Server: Plugin = async (ctx) => {
   };
 };
 
-const AgyPlugin = v1Server as UniversalAgyPlugin;
-AgyPlugin.id = "opencode-agy";
-AgyPlugin.server = v1Server;
-AgyPlugin.setup = setupV2Plugin;
+const AgyPlugin: UniversalAgyPlugin = {
+  id: "opencode-agy",
+  server: v1Server,
+  setup: setupV2Plugin,
+};
 
 export const server = AgyPlugin.server;
 export const setup = AgyPlugin.setup;

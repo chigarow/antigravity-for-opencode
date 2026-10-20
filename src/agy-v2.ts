@@ -172,6 +172,16 @@ function formatV2Error(err: unknown): AgyV2ToolResult {
   };
 }
 
+/**
+ * OpenCode 2.x command invocation payload.
+ * @see https://opencode.ai/v2/docs/build/plugins
+ */
+export interface AgyCommandInvocation {
+  sessionID: string;
+  prompt: { text?: string; [key: string]: any };
+  delivery?: "steer" | "queue";
+}
+
 export async function setupV2Plugin(ctx: any): Promise<void> {
   if (!ctx || typeof ctx !== "object") return;
 
@@ -229,7 +239,23 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
       const cmdDef = {
         name: "agy",
         description: cmd.description,
-        template: cmd.template,
+        // OpenCode 2.x commands are executable definitions, not markdown
+        // templates. Render the embedded template the same way the v1
+        // command did: substitute $ARGUMENTS, then send it to the session.
+        execute: async (input: AgyCommandInvocation) => {
+          if (typeof ctx.session?.prompt !== "function") {
+            throw new Error(
+              "opencode-agy: ctx.session.prompt is unavailable; cannot execute /agy",
+            );
+          }
+          const text = cmd.template.replaceAll("$ARGUMENTS", input.prompt?.text ?? "");
+          await ctx.session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text,
+            delivery: input.delivery,
+          });
+        },
       };
 
       if (typeof editor?.add === "function") {

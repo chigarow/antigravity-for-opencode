@@ -10,8 +10,13 @@
         "typescript": "^5.5.0",
       },
       "peerDependencies": {
-        "@opencode-ai/plugin": "^1.0.0",
+        "@opencode-ai/plugin": "^1.17.9 || ^1.18.0",
+        "@opencode/plugin": ">=2.0.0",
       },
+      "optionalPeers": [
+        "@opencode-ai/plugin",
+        "@opencode/plugin",
+      ],
     },
   },
   "packages": {
