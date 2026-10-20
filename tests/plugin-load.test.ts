@@ -57,15 +57,17 @@ function fakeCtx(): PluginInput {
 }
 
 describe("plugin module shape", () => {
-  test("exports AgyPlugin as default and named", async () => {
+  test("exports a plain object default definition (required by OpenCode 1.17+ and 2.x)", async () => {
     const mod = await import("../src/index.ts");
-    expect(typeof mod.AgyPlugin).toBe("function");
-    expect(typeof mod.default).toBe("function");
+    expect(typeof mod.default).toBe("object");
+    expect(mod.default.id).toBe("opencode-agy");
+    expect(typeof mod.default.server).toBe("function");
+    expect(typeof mod.default.setup).toBe("function");
   });
 
   test("plugin function returns hooks with exactly tool + config", async () => {
     const { AgyPlugin } = await import("../src/index.ts");
-    const hooks = await AgyPlugin(fakeCtx());
+    const hooks = await AgyPlugin.server(fakeCtx());
     expect(hooks).toBeDefined();
     expect(hooks.tool).toBeDefined();
     expect(hooks.tool?.agy).toBeDefined();
@@ -78,7 +80,7 @@ describe("plugin module shape", () => {
 describe("plugin config hook behavior", () => {
   async function getConfigHook(): Promise<NonNullable<Hooks["config"]>> {
     const { AgyPlugin } = await import("../src/index.ts");
-    const hooks = await AgyPlugin(fakeCtx());
+    const hooks = await AgyPlugin.server(fakeCtx());
     const hook = hooks.config;
     if (hook === undefined) throw new Error("AgyPlugin must expose a config hook");
     return hook;
@@ -163,7 +165,7 @@ describe("plugin config hook behavior", () => {
 describe("agy tool tier schema contracts (v0.8.0)", () => {
   async function tierSchema(): Promise<z.ZodTypeAny> {
     const { AgyPlugin } = await import("../src/index.ts");
-    const hooks = await AgyPlugin(fakeCtx());
+    const hooks = await AgyPlugin.server(fakeCtx());
     const toolDefinition = hooks.tool?.agy;
     if (toolDefinition === undefined) throw new Error("AgyPlugin must expose the agy tool");
     return toolDefinition.args.tier;

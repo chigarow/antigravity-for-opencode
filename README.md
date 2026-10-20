@@ -23,7 +23,7 @@ A thin, non-intrusive OpenCode plugin that spawns the official `agy` CLI as a sa
 - 🧠 **12 model tiers** — Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, and Gemini 4 Argon, each with low / medium / high reasoning effort
 - 🔁 **Resumable** — resume any agy conversation by ID or with `continue`, so long tasks survive timeouts
 - 🛡️ **Failures are data** — timeouts, quota, auth errors, and crashes are returned as structured text; the host agent never crashes
-- 🔌 **OpenCode 1.x & 2.x** — dual-export plugin with automatic host detection, plus subprocess cancellation on abort (2.x)
+- 🔌 **OpenCode 1.x & 2.x** — one default export exposing both the v1 `server` hook and the v2 `setup` hook, plus subprocess cancellation on abort (2.x)
 
 > [!NOTE]
 > **Will this get my Antigravity account banned?** No. The plugin spawns the official `agy` CLI in headless mode — the same binary you would run from your terminal, with the same authentication, rate limits, and quota checks enforced by Google's servers. It adds **zero additional calls** beyond what you would make manually.
@@ -60,7 +60,7 @@ OpenCode 1.x uses the singular `"plugin"` key in `~/.config/opencode/opencode.js
 Restart OpenCode. The `agy` tool and `/agy` slash command are loaded automatically from npm — no manual copy steps.
 
 > [!TIP]
-> Upgrading from OpenCode 1.x to 2.x? Rename `"plugin"` to `"plugins"` — the plugin detects the host version and mounts the right lifecycle hooks automatically, no code changes needed. If you previously copied `commands/agy.md` into `~/.config/opencode/commands/`, delete it (`rm ~/.config/opencode/commands/agy.md`) to pick up the plugin's bundled slash-command template.
+> Upgrading from OpenCode 1.x to 2.x? Rename `"plugin"` to `"plugins"` — the same default export carries both the v1 `server` hook and the v2 `setup` hook, so each host mounts the lifecycle hooks it understands, no code changes needed. If you previously copied `commands/agy.md` into `~/.config/opencode/commands/`, delete it (`rm ~/.config/opencode/commands/agy.md`) to pick up the plugin's bundled slash-command.
 
 ### From source (development only)
 

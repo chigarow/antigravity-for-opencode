@@ -8,10 +8,6 @@ describe("Task 1: package.json contracts & dependencies", () => {
   const pkgPath = path.join(__dirname, "../package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 
-  test("version is bumped to 0.11.0", () => {
-    expect(pkg.version).toBe("0.11.0");
-  });
-
   test("peerDependencies includes both @opencode-ai/plugin and @opencode/plugin", () => {
     expect(pkg.peerDependencies).toBeDefined();
     expect(pkg.peerDependencies["@opencode-ai/plugin"]).toBe("^1.17.9 || ^1.18.0");
@@ -222,7 +218,45 @@ describe("Task 2: Subprocess Cancellation & V2 Adapter", () => {
     expect(commandRegistered).toBeDefined();
     expect(commandRegistered.name).toBe("agy");
     expect(commandRegistered.description).toBeDefined();
-    expect(commandRegistered.template).toBeDefined();
+    expect(typeof commandRegistered.execute).toBe("function");
+    expect(commandRegistered.template).toBeUndefined();
+  });
+
+  test("setupV2Plugin command execution: substitutes $ARGUMENTS and prompts the session", async () => {
+    const { setupV2Plugin } = await import("../src/agy-v2");
+
+    let commandRegistered: any = null;
+    const prompts: any[] = [];
+
+    const mockCtx = {
+      command: {
+        transform: async (fn: any) => {
+          await fn({ add: (c: any) => (commandRegistered = c) });
+        },
+      },
+      session: {
+        prompt: async (input: any) => {
+          prompts.push(input);
+        },
+      },
+    };
+
+    await setupV2Plugin(mockCtx);
+    const invocation = commandRegistered;
+    expect(typeof invocation.execute).toBe("function");
+
+    await invocation.execute({
+      sessionID: "ses_test",
+      prompt: { text: "test" },
+      delivery: "queue",
+    });
+
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].sessionID).toBe("ses_test");
+    expect(prompts[0].delivery).toBe("queue");
+    expect(prompts[0].text).toContain("Delegate this task to the `agy` tool");
+    expect(prompts[0].text).toContain("test");
+    expect(prompts[0].text).not.toContain("$ARGUMENTS");
   });
 
   test("setupV2Plugin(ctx): defensive when ctx.command or transforms are undefined", async () => {
@@ -282,60 +316,67 @@ describe("Task 3: Universal Dual-Export Entrypoint", () => {
     };
   };
 
-  test("Loader Pattern 1: Default callable AgyPlugin(mockV1Ctx)", async () => {
+  test("default export is a plain object, never a callable", async () => {
     const mod = await import("../src/index");
-    expect(typeof mod.default).toBe("function");
-
-    const hooks = await mod.default(fakeV1Ctx());
-    expect(hooks).toBeDefined();
-    expect(hooks.tool?.agy).toBeDefined();
-    expect(hooks.config).toBeDefined();
+    expect(typeof mod.default).toBe("object");
+    expect(Array.isArray(mod.default)).toBe(false);
+    expect(typeof mod.default).not.toBe("function");
   });
 
-  test("Loader Pattern 2: Default property .server AgyPlugin.server(mockV1Ctx)", async () => {
+  test("v2 loader contract: default has id + setup(ctx)", async () => {
     const mod = await import("../src/index");
+    expect(mod.default.id).toBe("opencode-agy");
+    expect(typeof mod.default.setup).toBe("function");
+  });
+
+  test("v1 loader contract: default has id + server(input)", async () => {
+    const mod = await import("../src/index");
+    expect(mod.default.id).toBe("opencode-agy");
     expect(typeof mod.default.server).toBe("function");
 
     const hooks = await mod.default.server(fakeV1Ctx());
     expect(hooks).toBeDefined();
     expect(hooks.tool?.agy).toBeDefined();
+    expect(hooks.config).toBeDefined();
   });
 
-  test("Loader Pattern 3: Top-level named server(mockV1Ctx)", async () => {
-    const { server } = await import("../src/index");
-    expect(typeof server).toBe("function");
+  test("named server / setup mirror the default export", async () => {
+    const { server, setup, AgyPlugin, default: def } = await import("../src/index");
+
+    expect(server).toBe(def.server);
+    expect(setup).toBe(def.setup);
+    expect(AgyPlugin).toBe(def);
 
     const hooks = await server(fakeV1Ctx());
-    expect(hooks).toBeDefined();
     expect(hooks.tool?.agy).toBeDefined();
   });
 
-  test("Loader Pattern 4: Top-level named setup & default .id / .setup", async () => {
+  test("v2 setup registers both the agy tool and the executable /agy command", async () => {
     const mod = await import("../src/index");
-    const { setup, AgyPlugin } = mod;
 
-    expect(AgyPlugin.id).toBe("opencode-agy");
-    expect(typeof AgyPlugin.setup).toBe("function");
-    expect(typeof setup).toBe("function");
+    const tools: any[] = [];
+    const commands: any[] = [];
 
-    let v2ToolAdded = false;
     const mockV2Ctx = {
       tool: {
         transform: async (fn: any) => {
-          await fn({
-            add: (t: any) => {
-              if (t.name === "agy") v2ToolAdded = true;
-            },
-          });
+          await fn({ add: (t: any) => tools.push(t) });
+        },
+      },
+      command: {
+        transform: async (fn: any) => {
+          await fn({ add: (c: any) => commands.push(c) });
         },
       },
     };
 
-    await AgyPlugin.setup(mockV2Ctx);
-    expect(v2ToolAdded).toBe(true);
+    await mod.default.setup(mockV2Ctx);
 
-    v2ToolAdded = false;
-    await setup(mockV2Ctx);
-    expect(v2ToolAdded).toBe(true);
+    expect(tools.map((t) => t.name)).toEqual(["agy"]);
+    expect(typeof tools[0].execute).toBe("function");
+    expect(commands.map((c) => c.name)).toEqual(["agy"]);
+    expect(typeof commands[0].execute).toBe("function");
+    // OpenCode 2.x has no `template` command shape; it must be executable.
+    expect(commands[0].template).toBeUndefined();
   });
 });
