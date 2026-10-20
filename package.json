@@ -43,6 +43,7 @@
     "build:types": "bunx tsc --emitDeclarationOnly",
     "build:all": "bun run build && bun run build:types",
     "test": "bun test",
+    "test:smoke": "OPENCODE_SMOKE=1 bun test tests/v2-runtime.test.ts",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
