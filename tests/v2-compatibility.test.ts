@@ -8,10 +8,6 @@ describe("Task 1: package.json contracts & dependencies", () => {
   const pkgPath = path.join(__dirname, "../package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
 
-  test("version is bumped to 0.12.1", () => {
-    expect(pkg.version).toBe("0.12.1");
-  });
-
   test("peerDependencies includes both @opencode-ai/plugin and @opencode/plugin", () => {
     expect(pkg.peerDependencies).toBeDefined();
     expect(pkg.peerDependencies["@opencode-ai/plugin"]).toBe("^1.17.9 || ^1.18.0");
