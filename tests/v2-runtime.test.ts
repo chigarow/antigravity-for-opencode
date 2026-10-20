@@ -7,8 +7,7 @@ import path from "node:path";
 /**
  * Opt-in smoke test against a real OpenCode v2 runtime.
  *
- * Run with `OPENCODE_SMOKE=1 bun test tests/v2-runtime.test.ts` (or
- * `bun run test:smoke`). It drives the installed `opencode` binary in a
+ * Run with `OPENCODE_SMOKE=1 bun test tests/v2-runtime.test.ts`. It drives the installed `opencode` binary in a
  * throwaway HOME/XDG tree and covers the two regressions end to end:
  *
  * 1. the real PluginModule loader accepts the default export;

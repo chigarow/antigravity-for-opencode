@@ -200,12 +200,13 @@ echo "task" | ./scripts/agy-delegate.sh -
 
 ```bash
 bun test           # unit + integration tests
-bun run test:smoke # opt-in: drives the installed OpenCode 2.x binary
 bun run typecheck
 bun run build:all
 ```
 
-Tests cover argument building and tier mapping, every error path (quota, auth, timeout, not found, empty, truncation), plugin shape (the `agy` tool and `/agy` command register correctly), and real agy integration. `test:smoke` additionally loads the built plugin through the real OpenCode 2.x loader and executes `/agy` through the real command endpoint, using a local stub provider and a throwaway HOME.
+`tests/v2-runtime.test.ts` drives the installed OpenCode 2.x binary and is skipped by default; run it with `OPENCODE_SMOKE=1 bun test tests/v2-runtime.test.ts`.
+
+Tests cover argument building and tier mapping, every error path (quota, auth, timeout, not found, empty, truncation), plugin shape (the `agy` tool and `/agy` command register correctly), and real agy integration.
 
 ## Philosophy
 
