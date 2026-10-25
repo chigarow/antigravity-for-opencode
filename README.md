@@ -102,14 +102,23 @@ The main agent calls the `agy` tool to delegate scoped work:
 | --- | --- | --- |
 | `prompt` | `string` | **Required.** The task to send to agy. |
 | `tier` | `string` | Model tier, see [Model tiers](#model-tiers). Default: `flash-3.8-med`. |
-| `dir` | `string` | Workspace directory exposed to agy (`--add-dir`). |
+| `dir` | `string` | Workspace directory exposed to agy (`--add-dir`). Must resolve *inside* the workspace root (`AGY_WORKSPACE_ROOT`, default: the current project). Anything outside — `/`, `../..`, a symlink pointing out — is rejected with `DIR_NOT_ALLOWED`. |
 | `project` | `string` | Project name passed to agy (`--project <value>`), e.g. to scope work to a specific Google Cloud project. |
-| `timeout` | `string \| number` | Duration like `30m` or `300s`, or raw milliseconds (`300000` = `5m`). Default `15m` for all tiers, hard cap `4h` (anything above is clamped). `0` / `0s` is valid. |
-| `yolo` | `boolean` | Auto-approve permissions inside agy (`--dangerously-skip-permissions`). Since Agy 1.3.2 this no longer auto-approves `/plan` artifacts. Use deliberately, on a reviewed diff or throwaway branch/worktree. |
+| `timeout` | `string \| number` | Duration like `30m` or `300s`, or a positive integer of milliseconds (`300000` = `5m`). Default `15m` for all tiers, hard cap `4h` (anything above is clamped). Zero, negative, fractional-unit (`5.5h`), day (`1d`), and unparseable values are rejected with `INVALID_TIMEOUT`. |
+| `yolo` | `boolean` | Auto-approve permissions inside agy (`--dangerously-skip-permissions`). Requires **both** `sandbox: true` and host consent (`AGY_ALLOW_YOLO=1`); otherwise the call is rejected with `YOLO_NOT_APPROVED`. Since Agy 1.3.2 this no longer auto-approves `/plan` artifacts. |
 | `sandbox` | `boolean` | Run agy with terminal restrictions (`--sandbox`). Can block merge or filesystem-heavy work. |
 | `continue` | `boolean` | Resume the most recent agy conversation. Mutually exclusive with `conversation`. |
-| `conversation` | `string` | Resume a specific agy conversation by ID. Mutually exclusive with `continue`. |
-| `model` | `string` | Exact model name override, including non-Gemini backends when the CLI supports them. |
+| `conversation` | `string` | Resume a specific agy conversation by ID. Mutually exclusive with `continue`. IDs must be `ses_…`, a UUID, or a 6-64 character slug; anything else is rejected with `INVALID_CONVERSATION_ID`. |
+| `model` | `string` | Exact model name override, including non-Gemini backends when the CLI supports them. Values starting with `-` are rejected (`INVALID_ARGUMENT`). |
+
+#### Host policy
+
+Two environment variables bound what the tool may do. Both are read by the plugin process, never by the model:
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `AGY_WORKSPACE_ROOT` | current working directory | The only directory tree `dir` may point into. |
+| `AGY_ALLOW_YOLO` | unset (`false`) | Set to `1` to permit `yolo: true` (still requires `sandbox: true`). |
 
 #### Long-running work
 
@@ -135,7 +144,7 @@ The conversation ID is extracted from agy's log and surfaced on every success re
 #### Local file analysis
 
 > [!IMPORTANT]
-> Analyzing a local file (PDF, PNG, any binary agy's tools can read) in headless mode requires **both** `dir` (pointed at the file's parent directory) **and** `yolo: true`. In `--print` mode agy has no TTY, and its file-reading tools default to an "Ask" permission that can never be answered — so without `yolo: true` the call deadlocks silently or returns empty output. `sandbox: true` stays compatible: it restricts terminal commands only, not file reads.
+> Analyzing a local file (PDF, PNG, any binary agy's tools can read) in headless mode requires `dir` (pointed at the file's directory, inside the workspace root), `sandbox: true`, and **both** `yolo: true` **and** `AGY_ALLOW_YOLO=1`. In `--print` mode agy has no TTY, and its file-reading tools default to an "Ask" permission that can never be answered — so without `yolo: true` the call deadlocks silently or returns empty output. `sandbox: true` stays compatible: it restricts terminal commands only, not file reads.
 
 ```json
 {
@@ -156,7 +165,7 @@ Invoke agy directly from the OpenCode TUI:
 /agy --tier claude-sonnet-5-5-hi --sandbox "scaffold the reports module"
 /agy --tier claude-opus-5-5-hi --timeout 30m "merge feature/auth into main and resolve conflicts"
 /agy --continue "finish the previous task and add docs"
-/agy --tier flash-3.8-lo --yolo --dir /path/to/dir "summarize report.pdf"
+/agy --tier flash-3.8-lo --yolo --sandbox --dir ./docs "summarize report.pdf"
 ```
 
 ## Model tiers
@@ -180,21 +189,26 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 
 - Stdin is always detached, so agy can never wait on interactive input.
 - Every failure — timeout, quota, auth, crash, empty output, missing CLI — is returned as `AGY_ERROR [<CODE>]` text plus metadata; the host process stays up.
-- Secrets are scrubbed from surfaced errors, and agy's log is teed to a private, owner-only (`0700`) temp directory that is removed on every exit path.
-- Output is truncated at 100,000 characters as a hard safety cap.
-- Timeouts are handled by agy's own `--print-timeout`, user-controllable via the `timeout` argument.
+- The child inherits an explicit allowlist of environment variables (PATH, HOME, locale, proxy, XDG, TLS trust), never the host's full environment, and runs with the workspace root (or the granted `dir`) as its working directory.
+- Secrets are scrubbed from everything surfaced to the caller — stdout, stderr, and error messages — and agy's log is teed to a private, owner-only (`0700`) temp directory that is removed on every exit path.
+- Output is capped at 100,000 characters / 2,000 bytes of stderr, enforced while the stream is read rather than after buffering it all.
+- Timeouts are enforced twice: agy's own `--print-timeout`, and a host-side timer that terminates the child (SIGTERM, then SIGKILL after a short grace) if it overruns.
 - The calling agent owns verification: review the diff before trusting delegated changes.
 
 Compatibility is observed empirically against Agy 1.3.5 (check `agy --version`). One caveat: in headless mode agy can expand slash commands when prompt content begins with `/` (or follows a leading newline/tab), so restructure prompts that need literal slash-prefixed content. This plugin intentionally does not expose `--disable-slash-commands`.
 
+The package default-exports the plugin and provides no other runtime exports: opencode's plugin loader invokes every named function export as a plugin server, so extra exports break loading on 1.19.x. For programmatic use, `server`, `setup`, and `id` are attached to the default export; the tool-result builders live in `src/agy-command.ts`.
+
 ## Debugging
 
-A standalone bash wrapper mirrors the plugin (same tiers, same flags) for use outside OpenCode:
+A standalone bash wrapper mirrors the plugin's flags and its safety rules for use outside OpenCode:
 
 ```bash
 ./scripts/agy-delegate.sh --tier flash-3.8-hi "your task here"
 echo "task" | ./scripts/agy-delegate.sh -
 ```
+
+It enforces the same containment and consent rules as the tool: `--dir` must resolve inside `AGY_WORKSPACE_ROOT` (default: the current directory), `--yolo` additionally requires `--sandbox` and `AGY_ALLOW_YOLO=1`, `--continue` and `--conversation` are mutually exclusive, conversation IDs are validated, timeouts are parsed and clamped to `4h`, and child stdout/stderr are capped and redacted before they reach your terminal.
 
 ## Development
 

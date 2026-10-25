@@ -29,21 +29,29 @@ run_harness() {
 
 run_expect_fail() {
   local label="$1"; shift
+  local expected_code="$1"; shift
+  local expected_reason=""
+  if (($# > 0)) && [[ "$1" != --* ]]; then expected_reason="$1"; shift; fi
   local out="$EVIDENCE/$label"
   rm -rf "$out"; mkdir -p "$out"
   set +e
-  bash "$HARNESS" "$@" --evidence-dir "$out" >/dev/null 2>&1
+  bash "$HARNESS" "$@" --evidence-dir "$out" >/dev/null 2>"$out/stderr.log"
   local code=$?
   set -e
   local summary="$out/run-*/summary.json"
-  local fail_code=""
+  local fail_code="" fail_reason=""
   if compgen -G "$summary" > /dev/null; then
     fail_code="$(jq -r '.failureCode // "none"' $summary 2>/dev/null)"
+    fail_reason="$(jq -r '.failureReason // ""' $summary 2>/dev/null)"
   fi
-  if [[ $code -ne 0 ]]; then
-    record "$label" "PASS" "$code" "fail_code=$fail_code"
+  if [[ $code -eq 0 ]]; then
+    record "$label" "FAIL" "$code" "expected failure $expected_code, got success"
+  elif [[ "$fail_code" != "$expected_code" ]]; then
+    record "$label" "FAIL" "$code" "expected failure_code=$expected_code, got ${fail_code:-none}: $fail_reason"
+  elif [[ -n "$expected_reason" && "$fail_reason" != *"$expected_reason"* ]]; then
+    record "$label" "FAIL" "$code" "expected failure_reason to contain '$expected_reason', got: $fail_reason"
   else
-    record "$label" "FAIL" "$code" "expected non-zero"
+    record "$label" "PASS" "$code" "fail_code=$fail_code"
   fi
 }
 
@@ -107,13 +115,25 @@ if (kind === "absolute") {
 } else if (kind === "traversal") {
   members.push({ name: "package/../../../etc/passwd", type: "0", data: Buffer.from("root:x:0:0\n") });
 } else if (kind === "symlink") {
-  members.push({ name: "package/dist/index.js", type: "2", link: "../../../etc/passwd", replace: true });
+  members.push({ name: "package/dist/escape", type: "2", link: "../../../etc/passwd" });
 } else if (kind === "hardlink") {
   members.push({ name: "package/escape", type: "1", link: "/etc/passwd" });
 } else if (kind === "special") {
   members.push({ name: "package/baddev", type: "3", data: Buffer.alloc(0) });
 } else if (kind === "duplicate") {
   members.push({ name: "package/dist/index.js", type: "0", data: Buffer.from("overwritten"), duplicate: true });
+} else if (kind === "pax-path") {
+  members.push({ name: "package/PaxHeaders/evil", type: "x", data: Buffer.from("18 path=/etc/evil\n") });
+  members.push({ name: "package/pax-evil-file", type: "0", data: Buffer.from("x") });
+} else if (kind === "pax-linkpath") {
+  members.push({ name: "package/PaxHeaders/evil", type: "x", data: Buffer.from("22 linkpath=/etc/evil\n") });
+  members.push({ name: "package/pax-evil-link", type: "2", link: "benign" });
+} else if (kind === "gnu-long-name") {
+  members.push({ name: "././@LongLink", type: "L", data: Buffer.from("package/../../../etc/evil-long-name\0") });
+  members.push({ name: "package/long-name-file", type: "0", data: Buffer.from("x") });
+} else if (kind === "gnu-long-linkname") {
+  members.push({ name: "././@LongLink", type: "K", data: Buffer.from("../../../etc/evil-link-target\0") });
+  members.push({ name: "package/long-link", type: "2", link: "benign" });
 }
 let totalSize = 1024;
 for (const m of members) { totalSize += 512 + (m.data ? Math.ceil(m.data.length / 512) * 512 : 0); }
@@ -138,13 +158,13 @@ rm -rf "$EVIDENCE/missing-tarball"
 record "missing-tarball" "$([ $code -ne 0 ] && echo PASS || echo FAIL)" "$code" ""
 
 # Wrong candidate version
-run_expect_fail "wrong-candidate-version" --version 1.18.10 --tarball "$TARBALL" --candidate-version 0.9.0
+run_expect_fail "wrong-candidate-version" CANDIDATE_VERSION_MISMATCH "candidate package version mismatch" --version 1.18.10 --tarball "$TARBALL" --candidate-version 0.9.0
 
 # Wrong candidate name
-run_expect_fail "wrong-candidate-name" --version 1.18.10 --tarball "$TARBALL" --candidate-name wrong-name
+run_expect_fail "wrong-candidate-name" CANDIDATE_NAME_MISMATCH "candidate package name mismatch" --version 1.18.10 --tarball "$TARBALL" --candidate-name wrong-name
 
 # Wrong candidate SHA
-run_expect_fail "wrong-candidate-sha" --version 1.18.10 --tarball "$TARBALL" --candidate-sha256 0000000000000000000000000000000000000000000000000000000000000000
+run_expect_fail "wrong-candidate-sha" CANDIDATE_SHA256_MISMATCH "candidate tarball SHA-256 mismatch" --version 1.18.10 --tarball "$TARBALL" --candidate-sha256 0000000000000000000000000000000000000000000000000000000000000000
 
 # Malformed version
 set +e; bash "$HARNESS" --version "latest" --tarball "$TARBALL" --evidence-dir "$EVIDENCE/bad-version" >/dev/null 2>&1; code=$?; set -e
@@ -174,11 +194,22 @@ record "malformed-provider-mode" "$([ $code -ne 0 ] && echo PASS || echo FAIL)" 
 echo ""
 echo "=== MALICIOUS ARCHIVE CONTROLS ==="
 
-for kind in absolute traversal symlink hardlink special duplicate; do
+for kind in absolute traversal symlink hardlink special duplicate pax-path pax-linkpath gnu-long-name gnu-long-linkname; do
   echo -n "Creating malicious-$kind archive... "
   outfile=$(create_malicious_archive "$kind" "$kind")
   echo "done"
-  run_expect_fail "malicious-$kind" --version 1.18.10 --tarball "$outfile"
+  case "$kind" in
+    absolute) expected_reason="unsafe member path" ;;
+    traversal) expected_reason="non-canonical member path" ;;
+    symlink) expected_reason="link target escapes package root" ;;
+    hardlink) expected_reason="unsafe link target" ;;
+    special) expected_reason="special/device/unsupported member type" ;;
+    duplicate) expected_reason="duplicate or security-ambiguous member path" ;;
+    pax-path|pax-linkpath) expected_reason="pax extended header member is rejected" ;;
+    gnu-long-name) expected_reason="GNU long name member is rejected" ;;
+    gnu-long-linkname) expected_reason="GNU long linkname member is rejected" ;;
+  esac
+  run_expect_fail "malicious-$kind" ARCHIVE_INVALID "$expected_reason" --version 1.18.10 --tarball "$outfile"
 done
 
 echo ""
@@ -190,7 +221,7 @@ echo ""
 echo "=== SUMMARY ==="
 echo "PASS=$PASS FAIL=$FAIL SKIP=$SKIP"
 if [[ $FAIL -gt 0 ]]; then
-  printf '%s\n"---FAILURES---'
+  printf '%s\n' "---FAILURES---"
   for r in "${RESULTS[@]}"; do
     [[ "$r" == *"|FAIL|"* ]] && echo "$r"
   done

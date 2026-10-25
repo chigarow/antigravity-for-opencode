@@ -24,7 +24,12 @@ dist/
 # Bun
 .bun/
 bun.lockb
-bun.lock
+
+# Package manager config (machine-local registry/auth settings)
+.npmrc
+.yarnrc
+.yarnrc.yml
+*.tgz
 
 # Test artifacts
 coverage/

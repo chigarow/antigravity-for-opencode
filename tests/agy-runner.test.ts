@@ -8,7 +8,7 @@ import {
   type SpawnFn,
 } from "../src/agy-runner";
 import path from "node:path";
-import { statSync, existsSync } from "node:fs";
+import { statSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "os";
 
 function createFakeProc({
@@ -95,10 +95,16 @@ describe("buildAgyArgs", () => {
     );
   });
 
-  test("adds --add-dir when dir provided", () => {
-    const args = buildAgyArgs({ prompt: "x", dir: "/tmp/repo" });
+  test("adds --add-dir when dir is inside the workspace root", () => {
+    const args = buildAgyArgs({ prompt: "x", dir: "src", policy: { workspaceRoot: process.cwd() } });
     expect(args).toContain("--add-dir");
-    expect(args).toContain("/tmp/repo");
+    expect(args[args.indexOf("--add-dir") + 1]).toBe(realpathSync(path.join(process.cwd(), "src")));
+  });
+
+  test("rejects a dir outside the workspace root", () => {
+    expect(() => buildAgyArgs({ prompt: "x", dir: "/tmp", policy: { workspaceRoot: process.cwd() } })).toThrow(
+      /outside the approved workspace/
+    );
   });
 
   test("adds --project when project provided", () => {
@@ -111,9 +117,16 @@ describe("buildAgyArgs", () => {
     expect(args[pIndex + 1]).toBe("x");
   });
 
-  test("adds --dangerously-skip-permissions when yolo=true", () => {
-    const args = buildAgyArgs({ prompt: "x", yolo: true });
+  test("adds --dangerously-skip-permissions only with sandbox and host consent", () => {
+    const args = buildAgyArgs({
+      prompt: "x",
+      sandbox: true,
+      yolo: true,
+      policy: { allowYolo: true },
+    });
     expect(args).toContain("--dangerously-skip-permissions");
+    expect(args).toContain("--sandbox");
+    expect(() => buildAgyArgs({ prompt: "x", yolo: true })).toThrow(/yolo requires/);
   });
 
   test("respects custom timeout", () => {
@@ -151,9 +164,9 @@ describe("buildAgyArgs", () => {
     expect(args).toContain("45s");
   });
 
-  test("normalizes 0 or small to seconds", () => {
-    expect(buildAgyArgs({ prompt: "x", timeout: 0 })).toContain("0s");
+  test("rejects zero and coerces small values to seconds", () => {
     expect(buildAgyArgs({ prompt: "x", timeout: 5000 })).toContain("5s");
+    expect(() => buildAgyArgs({ prompt: "x", timeout: 0 })).toThrow(/invalid timeout/);
   });
 
   test("always puts -p and prompt as last arguments", () => {
@@ -487,9 +500,8 @@ describe("buildAgyArgs", () => {
     ).rejects.toMatchObject({ code: "INVALID_TIMEOUT" });
   });
 
-  test("literal 0 still coerces to 0s (preserved policy)", () => {
-    const args = buildAgyArgs({ prompt: "x", timeout: 0 });
-    expect(args).toContain("0s");
+  test("literal 0 is rejected instead of disabling the timeout", () => {
+    expect(() => buildAgyArgs({ prompt: "x", timeout: 0 })).toThrow(/invalid timeout/);
   });
 });
 

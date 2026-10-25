@@ -10,6 +10,7 @@
  */
 
 import agyCommandMarkdown from "../commands/agy.md";
+import type { AgyResult, Tier } from "./agy-runner";
 
 /** Parsed result of {@link parseAgyCommand}. */
 export interface ParsedCommand {
@@ -139,25 +140,83 @@ export function parseAgyCommand(markdown: string): ParsedCommand {
  */
 export function isCommandDef(value: unknown): value is CommandDef {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  for (const key of Object.keys(value)) {
-    switch (key) {
-      case "template":
-      case "description":
-      case "agent":
-      case "model":
-      case "subtask":
-        break;
-      default:
-        return false;
-    }
-  }
-  if (!("template" in value)) return false;
-  if (typeof value.template !== "string" || value.template.trim().length === 0) return false;
-  if ("description" in value && typeof value.description !== "string") return false;
-  if ("agent" in value && typeof value.agent !== "string") return false;
-  if ("model" in value && typeof value.model !== "string") return false;
-  if ("subtask" in value && typeof value.subtask !== "boolean") return false;
+  const def = value as Record<string, unknown>;
+  // The template must be the definition's own string. `in` would accept an
+  // inherited property from a prototype, which no real config entry has.
+  if (!Object.hasOwn(def, "template")) return false;
+  if (typeof def.template !== "string" || def.template.trim().length === 0) return false;
+  // Optional fields are type-checked when present. Unknown keys are allowed:
+  // OpenCode may add command fields over time, and rejecting them would
+  // silently replace a user's working definition.
+  if (Object.hasOwn(def, "description") && typeof def.description !== "string") return false;
+  if (Object.hasOwn(def, "agent") && typeof def.agent !== "string") return false;
+  if (Object.hasOwn(def, "model") && typeof def.model !== "string") return false;
+  if (Object.hasOwn(def, "subtask") && typeof def.subtask !== "boolean") return false;
   return true;
+}
+
+const registeredAddEditors = new WeakMap<object, Set<string>>();
+
+/**
+ * Insert `def` under `name` into whatever registry shape the host provides.
+ *
+ * Single implementation shared by v1 (`src/index.ts` config hook) and v2
+ * (`src/agy-v2.ts` transform editors), idempotent for every shape:
+ * - add-capable editors (OpenCode 2.x): append unless `has(name)` reports the
+ *   name taken; an add-only editor (no `has`) cannot be inspected, so what
+ *   this module already added is remembered per editor in a WeakMap (the
+ *   editor itself is never mutated);
+ * - Map registries: `set` unless `isValid` accepts the existing entry;
+ * - Array registries: push when absent, replace in place when invalid
+ *   (inserted entries are tagged with `name` so repeat calls can find them);
+ * - plain object registries: assign unless an own `name` key holds a value
+ *   `isValid` accepts.
+ * An entry `isValid` accepts is always preserved by identity (never copied),
+ * and sibling entries are never touched.
+ */
+export function upsertRegistryEntry(
+  editor: any,
+  name: string,
+  def: unknown,
+  isValid: (value: unknown) => boolean,
+): void {
+  if (typeof editor?.add === "function") {
+    if (typeof editor.has === "function") {
+      if (editor.has(name)) return;
+    } else {
+      // Add-only editor: remember per editor which names we already added.
+      let seen = registeredAddEditors.get(editor);
+      if (!seen) {
+        seen = new Set();
+        registeredAddEditors.set(editor, seen);
+      }
+      if (seen.has(name)) return;
+      seen.add(name);
+    }
+    editor.add(def);
+    return;
+  }
+  if (editor instanceof Map) {
+    if (!isValid(editor.get(name))) editor.set(name, def);
+    return;
+  }
+  if (Array.isArray(editor)) {
+    const index = editor.findIndex((entry) => entry?.name === name);
+    if (index === -1) {
+      editor.push({ name, ...(def as Record<string, unknown>) });
+      return;
+    }
+    if (isValid(editor[index])) return;
+    editor.splice(index, 1, { name, ...(def as Record<string, unknown>) });
+    return;
+  }
+  if (
+    editor &&
+    typeof editor === "object" &&
+    !(Object.hasOwn(editor, name) && isValid(editor[name]))
+  ) {
+    editor[name] = def;
+  }
 }
 
 /**
@@ -167,4 +226,70 @@ export function isCommandDef(value: unknown): value is CommandDef {
  */
 export function createAgyCommand(): ParsedCommand {
   return parseAgyCommand(agyCommandMarkdown);
+}
+
+/**
+ * Arguments accepted by the agy tool and by {@link buildAgyToolResult}.
+ * Mirrors the tool schema one-to-one.
+ */
+export interface AgyToolArgs {
+  prompt: string;
+  tier?: Tier;
+  dir?: string;
+  project?: string;
+  timeout?: string | number;
+  yolo?: boolean;
+  sandbox?: boolean;
+  continue?: boolean;
+  conversation?: string;
+  model?: string;
+}
+
+/**
+ * Pure success-path builder for the agy tool result.
+ * Extracted so tests can verify header/metadata/warning logic without
+ * spawning real agy or leaking a global module mock.
+ *
+ * Lives here (not in src/index.ts) so the entry module can keep a
+ * default-only runtime export surface (opencode 1.19.4 loader safety).
+ */
+export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefined) {
+  if (!result) {
+    return {
+      title: `agy error (UNDEFINED_RESULT)`,
+      output: [
+        "AGY_UNDEFINED_RESULT",
+        "agy runner returned an undefined result. This usually means the tool was invoked by an incompatible OpenCode version.",
+        "Please report this issue.",
+      ].join("\n"),
+      metadata: { error: true, unexpected: true, code: "UNDEFINED_RESULT" },
+    };
+  }
+  const header = [
+    `## agy result`,
+    `tier: ${args.tier ?? "flash-3.8-med"}`,
+    `duration: ${result.durationMs}ms`,
+    `exit: ${result.exitCode}`,
+    args.sandbox ? `sandbox: true` : "",
+    (args.continue || args.conversation) ? `resumed: true` : "",
+    (args.yolo && args.sandbox)
+      ? "WARNING: yolo (--dangerously-skip-permissions) + sandbox both enabled. agy will auto-approve every tool inside a restricted terminal."
+      : "",
+    ``,
+  ].filter(Boolean).join("\n");
+
+  return {
+    title: `agy (${args.tier ?? "flash-3.8-med"})`,
+    output: header + "\n" + result.stdout,
+    metadata: {
+      tier: args.tier ?? "flash-3.8-med",
+      durationMs: result.durationMs,
+      exitCode: result.exitCode,
+      tool: "agy",
+      sandbox: !!args.sandbox,
+      yolo: !!args.yolo,
+      resumed: !!(args.continue || args.conversation),
+      ...(result.conversationId ? { conversationId: result.conversationId } : {}),
+    },
+  };
 }

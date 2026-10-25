@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { buildAgyToolResult } from "../src/index";
+import { buildAgyToolResult } from "../src/agy-command";
 import type { AgyResult } from "../src/agy-runner";
 
 const fakeResult: AgyResult = {

@@ -266,16 +266,26 @@ const root = path.resolve(process.argv[2]);
 const output = path.resolve(process.argv[3]);
 const files = [];
 const invalid = [];
+const realRoot = fs.realpathSync(root);
+const contained = (candidate) => candidate === realRoot || candidate.startsWith(`${realRoot}${path.sep}`);
 const walk = (dir) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (full === output) continue;
+    const relative = path.relative(root, full);
+    if (entry.isSymbolicLink()) {
+      invalid.push({ path: relative, reason: "symlink" });
+      continue;
+    }
+    if (!contained(fs.realpathSync(full))) {
+      invalid.push({ path: relative, reason: "outside-staging-tree" });
+      continue;
+    }
     if (entry.isDirectory()) {
       walk(full);
       continue;
     }
-    const relative = path.relative(root, full);
-    const stat = fs.statSync(full);
+    const stat = fs.lstatSync(full);
     if (stat.size === 0) {
       invalid.push({ path: relative, reason: "zero-byte" });
       continue;
@@ -303,6 +313,51 @@ const walk = (dir) => {
 walk(root);
 fs.writeFileSync(output, `${JSON.stringify({ files: files.sort(), invalid }, null, 2)}\n`);
 if (invalid.length > 0) process.exitCode = 1;
+NODE
+}
+
+# Refuse to mirror anything from a staging subtree that contains a symlink or
+# an entry resolving outside the staging tree (lstat + realpath containment).
+# shellcheck disable=SC2329
+stage_evidence_safe() {
+  [[ -d "$1" ]] || return 0
+  node - "$1" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+const root = path.resolve(process.argv[2]);
+if (fs.lstatSync(root).isSymbolicLink()) {
+  process.stderr.write(`evidence staging rejects symlinked root: ${root}\n`);
+  process.exit(1);
+}
+const realRoot = fs.realpathSync(root);
+const contained = (candidate) => candidate === realRoot || candidate.startsWith(`${realRoot}${path.sep}`);
+let unsafe = false;
+const reject = (reason, relative) => {
+  process.stderr.write(`evidence staging rejects ${reason}: ${relative}\n`);
+  unsafe = true;
+};
+const walk = (dir) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    const relative = path.relative(root, full);
+    if (entry.isSymbolicLink()) {
+      reject("symlinked entry", relative);
+      continue;
+    }
+    const stat = fs.lstatSync(full);
+    if (stat.isBlockDevice() || stat.isCharacterDevice() || stat.isFIFO() || stat.isSocket()) {
+      reject("special entry", relative);
+      continue;
+    }
+    if (!contained(fs.realpathSync(full))) {
+      reject("entry outside the staging tree", relative);
+      continue;
+    }
+    if (entry.isDirectory()) walk(full);
+  }
+};
+walk(root);
+if (unsafe) process.exit(1);
 NODE
 }
 
@@ -362,8 +417,16 @@ cleanup() {
   fi
   if [[ -n "$stage_dir" && -d "$stage_dir" ]]; then
     mkdir -p "$run_dir/provider-captures"
-    cp -R "$stage_dir/captures/." "$run_dir/provider-captures/" 2>/dev/null || true
-    cp -R "$stage_dir/evidence/." "$run_dir/" 2>/dev/null || true
+    if stage_evidence_safe "$stage_dir/captures"; then
+      cp -RP "$stage_dir/captures/." "$run_dir/provider-captures/" 2>/dev/null || true
+    else
+      printf '%s\n' "skipped provider-captures copy: symlink or staging escape detected under $stage_dir/captures" >&2
+    fi
+    if stage_evidence_safe "$stage_dir/evidence"; then
+      cp -RP "$stage_dir/evidence/." "$run_dir/" 2>/dev/null || true
+    else
+      printf '%s\n' "skipped evidence copy: symlink or staging escape detected under $stage_dir/evidence" >&2
+    fi
   fi
   if [[ -n "$run_dir" ]]; then
     write_cleanup
@@ -404,15 +467,6 @@ if ! command -v tar >/dev/null 2>&1; then
   printf '%s\n' "$failure_reason" >&2
   exit 2
 fi
-if ! command -v podman >/dev/null 2>&1; then
-  podman_available=0
-  failure_code="PREFLIGHT_TOOL_MISSING"
-  failure_reason="required command is missing: podman"
-  printf '%s\n' "$failure_reason" >&2
-  exit 2
-fi
-podman_available=1
-
 if [[ -n "$parse_error_code" ]]; then
   failure_code="$parse_error_code"
   failure_reason="$parse_error_message"
@@ -476,30 +530,6 @@ if ! tarball="$(cd "$(dirname "$tarball")" && pwd -P)/$(basename "$tarball")"; t
   exit 2
 fi
 
-host_arch="$(uname -m)"
-podman_arch="$(podman info --format '{{.Host.Arch}}' 2>"$run_dir/podman-info.stderr" || true)"
-if [[ -z "$host_arch" || -z "$podman_arch" ]]; then
-  failure_code="IDENTITY_MISSING"
-  failure_reason="host or Podman architecture identity is unavailable"
-  printf '%s\n' "$failure_reason" >&2
-  exit 2
-fi
-if ! container_arch="$(normalize_arch "$podman_arch")"; then
-  failure_code="UNSUPPORTED_ARCHITECTURE"
-  failure_reason="unsupported Podman architecture: $podman_arch"
-  printf '%s\n' "$failure_reason" >&2
-  exit 2
-fi
-{
-  printf 'run_id=%s\n' "$run_id"
-  printf 'date_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  printf 'uname=%s\n' "$(uname -a)"
-  printf 'host_arch=%s\n' "$host_arch"
-  printf 'podman_arch=%s\n' "$podman_arch"
-  printf 'podman_version='; podman --version
-  podman info 2>&1
-} >"$run_dir/host-identity.txt"
-
 if ! tar -tzf "$tarball" >"$run_dir/tar-list.txt" 2>"$run_dir/tar-error.log"; then
   failure_code="INVALID_TARBALL"
   failure_reason="candidate is not a readable gzip tarball"
@@ -512,7 +542,17 @@ const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
 const archive = process.argv[2];
-const bytes = zlib.gunzipSync(fs.readFileSync(archive));
+const MAX_DECOMPRESSED_BYTES = 256 * 1024 * 1024;
+let bytes;
+try {
+  bytes = zlib.gunzipSync(fs.readFileSync(archive), { maxOutputLength: MAX_DECOMPRESSED_BYTES });
+} catch (error) {
+  if (error.code === "ERR_BUFFER_TOO_LARGE") {
+    process.stderr.write(`decompressed archive exceeds the ${MAX_DECOMPRESSED_BYTES} byte decompression limit\n`);
+    process.exit(1);
+  }
+  throw error;
+}
 const entries = [];
 const seen = new Set();
 const readField = (buffer, offset, length) => buffer.subarray(offset, offset + length).toString("utf8").replace(/\0.*$/s, "");
@@ -544,10 +584,10 @@ while (offset + 512 <= bytes.length) {
   const type = readField(header, 156, 1) || "0";
   const link = readField(header, 157, 100);
   const size = readOctal(header, 124, 12);
-  if (["x", "g", "L", "K"].includes(type)) {
-    offset += 512 + Math.ceil(size / 512) * 512;
-    continue;
-  }
+  if (type === "x") fail(`pax extended header member is rejected: ${JSON.stringify(name)}`);
+  if (type === "g") fail(`pax global header member is rejected: ${JSON.stringify(name)}`);
+  if (type === "L") fail(`GNU long name member is rejected: ${JSON.stringify(name)}`);
+  if (type === "K") fail(`GNU long linkname member is rejected: ${JSON.stringify(name)}`);
   const nameKey = canonicalName(name, type);
   const key = nameKey.endsWith("/") ? nameKey.slice(0, -1) : nameKey;
   if (seen.has(key)) fail(`duplicate or security-ambiguous member path: ${JSON.stringify(name)}`);
@@ -575,6 +615,39 @@ then
   printf '%s\n' "$failure_reason" >&2
   exit 2
 fi
+
+if ! command -v podman >/dev/null 2>&1; then
+  podman_available=0
+  failure_code="PREFLIGHT_TOOL_MISSING"
+  failure_reason="required command is missing: podman"
+  printf '%s\n' "$failure_reason" >&2
+  exit 2
+fi
+podman_available=1
+
+host_arch="$(uname -m)"
+podman_arch="$(podman info --format '{{.Host.Arch}}' 2>"$run_dir/podman-info.stderr" || true)"
+if [[ -z "$host_arch" || -z "$podman_arch" ]]; then
+  failure_code="IDENTITY_MISSING"
+  failure_reason="host or Podman architecture identity is unavailable"
+  printf '%s\n' "$failure_reason" >&2
+  exit 2
+fi
+if ! container_arch="$(normalize_arch "$podman_arch")"; then
+  failure_code="UNSUPPORTED_ARCHITECTURE"
+  failure_reason="unsupported Podman architecture: $podman_arch"
+  printf '%s\n' "$failure_reason" >&2
+  exit 2
+fi
+{
+  printf 'run_id=%s\n' "$run_id"
+  printf 'date_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'uname=%s\n' "$(uname -a)"
+  printf 'host_arch=%s\n' "$host_arch"
+  printf 'podman_arch=%s\n' "$podman_arch"
+  printf 'podman_version='; podman --version
+  podman info 2>&1
+} >"$run_dir/host-identity.txt"
 
 candidate_package_json="$(tar -xOf "$tarball" package/package.json 2>"$run_dir/candidate-package-error.log" || true)"
 if ! jq -e 'type == "object" and (.name|type == "string") and (.version|type == "string") and (.main|type == "string")' >/dev/null <<<"$candidate_package_json"; then
@@ -990,14 +1063,22 @@ else
 fi
 
 runtime_code=0
-if ! podman run --name "$runtime_name" --label "$LABEL_KEY=$run_id" --network "$network_name" --volume "$stage_dir:/input:rw" --env HOME=/runtime/home --env XDG_CONFIG_HOME=/runtime/config --env XDG_CACHE_HOME=/runtime/cache --env PATH=/runtime/project/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin --env PWD=/runtime/project --env OPENCODE_CONFIG=/runtime/project/.opencode.json --env OPENCODE_DISABLE_AUTOUPDATE=1 --env OPENCODE_DISABLE_DEFAULT_PLUGINS=1 --env NPM_CONFIG_AUDIT=false --env NPM_CONFIG_FUND=false --env NPM_CONFIG_UPDATE_NOTIFIER=false --env NPM_CONFIG_CACHE=/runtime/cache/npm --env OPENCODE_VERSION="$version" --env CANDIDATE_VERSION="$candidate_version" --env CANDIDATE_SHA256="$tarball_sha256" --env PROVIDER_MODE="$provider_mode" --env SCENARIO="$scenario" --env HARNESS_TIMEOUT="$timeout_seconds" --env PODMAN_ARCH="$container_arch" --env PROVIDER_ALIAS="$provider_alias" "$IMAGE" bash /input/runtime.sh >"$run_dir/runtime-launch.stdout" 2>"$run_dir/runtime-launch.stderr"; then
+if ! podman run --name "$runtime_name" --label "$LABEL_KEY=$run_id" --network "$network_name" --volume "$stage_dir:/input:rw" --volume "$stage_dir/captures:/input/captures:ro" --env HOME=/runtime/home --env XDG_CONFIG_HOME=/runtime/config --env XDG_CACHE_HOME=/runtime/cache --env PATH=/runtime/project/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin --env PWD=/runtime/project --env OPENCODE_CONFIG=/runtime/project/.opencode.json --env OPENCODE_DISABLE_AUTOUPDATE=1 --env OPENCODE_DISABLE_DEFAULT_PLUGINS=1 --env NPM_CONFIG_AUDIT=false --env NPM_CONFIG_FUND=false --env NPM_CONFIG_UPDATE_NOTIFIER=false --env NPM_CONFIG_CACHE=/runtime/cache/npm --env OPENCODE_VERSION="$version" --env CANDIDATE_VERSION="$candidate_version" --env CANDIDATE_SHA256="$tarball_sha256" --env PROVIDER_MODE="$provider_mode" --env SCENARIO="$scenario" --env HARNESS_TIMEOUT="$timeout_seconds" --env PODMAN_ARCH="$container_arch" --env PROVIDER_ALIAS="$provider_alias" "$IMAGE" bash /input/runtime.sh >"$run_dir/runtime-launch.stdout" 2>"$run_dir/runtime-launch.stderr"; then
   runtime_code=$?
 fi
 runtime_created=1
 printf '%s\n' "$runtime_code" >"$run_dir/runtime-container-exit-code"
 mkdir -p "$run_dir/provider-captures"
-cp -R "$stage_dir/captures/." "$run_dir/provider-captures/" 2>/dev/null || true
-cp -R "$stage_dir/evidence/." "$run_dir/" 2>/dev/null || true
+if stage_evidence_safe "$stage_dir/captures"; then
+  cp -RP "$stage_dir/captures/." "$run_dir/provider-captures/" 2>/dev/null || true
+else
+  printf '%s\n' "skipped provider-captures copy: symlink or staging escape detected under $stage_dir/captures" >&2
+fi
+if stage_evidence_safe "$stage_dir/evidence"; then
+  cp -RP "$stage_dir/evidence/." "$run_dir/" 2>/dev/null || true
+else
+  printf '%s\n' "skipped evidence copy: symlink or staging escape detected under $stage_dir/evidence" >&2
+fi
 podman inspect "$runtime_name" >"$run_dir/podman-runtime-inspect.json" 2>"$run_dir/podman-runtime-inspect.stderr" || true
 podman inspect "$runtime_name" | jq '{name:.[0].Name,mounts:.[0].Mounts,environment:.[0].Config.Env,image:.[0].ImageName,architecture:.[0].Architecture,labels:.[0].Config.Labels}' >"$run_dir/mount-audit.json" 2>"$run_dir/mount-audit.stderr" || true
 if [[ "$fake_created" == 1 ]]; then podman logs "$fake_name" >"$run_dir/fake-server.log" 2>&1 || true; fi

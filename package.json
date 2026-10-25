@@ -1,6 +1,6 @@
 {
   "name": "opencode-agy",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "OpenCode plugin for delegating scoped work to the Antigravity CLI (agy / Gemini) in headless mode. Thin wrapper with qualified safety and environment caveats.",
   "type": "module",
   "main": "./dist/index.js",
@@ -40,13 +40,13 @@
   ],
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm",
-    "build:types": "bunx tsc --emitDeclarationOnly",
-    "build:all": "bun run build && bun run build:types",
+    "build:types": "tsc --emitDeclarationOnly",
+    "build:all": "bun run clean && bun run build && bun run build:types",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "prepublishOnly": "bun run build:all"
+    "prepublishOnly": "bun run typecheck && bun test && bun run build:all"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "^1.17.9 || ^1.18.0",
@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.17.9",
-    "@types/bun": "latest",
+    "@types/bun": "1.3.14",
     "typescript": "^5.5.0"
   },
   "opencode": {

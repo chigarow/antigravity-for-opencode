@@ -1,5 +1,5 @@
-import { runAgy, AgyError, type AgyResult } from "./agy-runner";
-import { createAgyCommand } from "./agy-command";
+import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets, type AgyResult } from "./agy-runner";
+import { createAgyCommand, upsertRegistryEntry } from "./agy-command";
 
 /**
  * Native JSON Schema for OpenCode 2.x tool registration.
@@ -33,7 +33,8 @@ export const AGY_V2_TOOL_SCHEMA = {
     },
     dir: {
       type: "string",
-      description: "Workspace directory to give agy (--add-dir).",
+      description:
+        "Workspace directory to give agy (--add-dir). Must resolve inside the workspace root (AGY_WORKSPACE_ROOT, default: the current project).",
     },
     project: {
       type: "string",
@@ -42,17 +43,17 @@ export const AGY_V2_TOOL_SCHEMA = {
     timeout: {
       oneOf: [{ type: "string" }, { type: "number" }],
       description:
-        "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or raw milliseconds (e.g. 300000 or 600000). " +
-        "Numbers/strings of digits are normalized to proper duration (300000 → '5m'). " +
+        "Timeout for agy. Accepts duration strings like '5m', '10m', '300s', or a positive integer of milliseconds (e.g. 300000). " +
+        "Numbers are normalized to a proper duration (300000 → '5m'). " +
         "Default: '15m' for every tier. " +
-        "Hard upper bound: any value above 4h is silently clamped to '4h'. " +
+        "Values that are not a positive duration are rejected with INVALID_TIMEOUT. " +
+        "Hard upper bound: any value above 4h is clamped to '4h'. " +
         "For long tasks (big merges, heavy refactors) use '15m' or '30m'.",
     },
     yolo: {
       type: "boolean",
       description:
-        "Auto-approve every tool inside agy (--dangerously-skip-permissions). Use only with --sandbox or throwaway dirs. " +
-        "Required for local file analysis (PDF/image) — agy's MCP tools need auto-approval in headless mode.",
+        "Auto-approve every tool inside agy (--dangerously-skip-permissions). Requires sandbox: true and host consent (AGY_ALLOW_YOLO=1); otherwise the call is rejected with YOLO_NOT_APPROVED.",
     },
     sandbox: {
       type: "boolean",
@@ -76,6 +77,7 @@ export const AGY_V2_TOOL_SCHEMA = {
     },
   },
   required: ["prompt"],
+  additionalProperties: false,
 } as const;
 
 export interface AgyV2ToolResult {
@@ -130,15 +132,19 @@ export function buildAgyV2ToolResult(
 
 function formatV2Error(err: unknown): AgyV2ToolResult {
   if (err instanceof AgyError) {
-    const convId = err.details?.conversationId;
+    // Only echo a conversation id we would accept back as a selector; a value
+    // the log parser invented must never become model guidance.
+    const convId = isValidConversationId(err.details?.conversationId)
+      ? err.details.conversationId
+      : undefined;
     const resumeHint = convId
       ? `\nTo resume this exact conversation: pass conversation: "${convId}" (or --continue) together with a higher timeout (see details.suggestedNextTimeout) if available.`
       : "";
 
     const body = [
       `AGY_ERROR [${err.code}]`,
-      err.message,
-      err.details ? JSON.stringify(err.details, null, 2) : "",
+      redactError(err),
+      err.details ? scrubSecrets(JSON.stringify(err.details, null, 2)) : "",
       "",
       "agy sub-agent failed. Decide whether to retry with higher timeout (see details.suggestedNextTimeout or durationMs), change tier, use --continue/--conversation, enable --sandbox (or not for merges), or handle manually.",
       resumeHint,
@@ -155,10 +161,9 @@ function formatV2Error(err: unknown): AgyV2ToolResult {
     };
   }
 
-  const message = err instanceof Error ? err.message : String(err);
   const body = [
     `AGY_UNEXPECTED_ERROR`,
-    message,
+    redactError(err),
     "",
     "Bug in opencode-agy plugin or environment. Please report.",
   ].join("\n");
@@ -172,21 +177,23 @@ function formatV2Error(err: unknown): AgyV2ToolResult {
   };
 }
 
+/** v2 registration never overwrites: any defined existing value counts as taken. */
+const defined = (value: unknown): boolean => value !== undefined;
+
 export async function setupV2Plugin(ctx: any): Promise<void> {
   if (!ctx || typeof ctx !== "object") return;
 
   if (typeof ctx.tool?.transform === "function") {
     await ctx.tool.transform((editor: any) => {
-      const toolDef = {
+      upsertRegistryEntry(editor, "agy", {
         name: "agy",
         description:
           "Delegate a well-scoped task to Antigravity (agy / Gemini) in headless mode. " +
           "Best for bulk work, scaffolding, tests, research, or cross-model verification. " +
           "The main agent MUST verify the result. " +
           "Supports resume (`continue` / `conversation`) and `--sandbox` for safer tool use. " +
-          "For local file analysis (PDF, PNG, images), set `dir` to the file's parent directory AND set `yolo: true`. " +
-          "In headless mode, agy's file-reading tools (pdf-reader, read_file) default to 'Ask' permission which deadlocks without a TTY. " +
-          "`yolo: true` auto-approves all tool permissions; `dir` scopes the workspace so agy can access the file. " +
+          "`dir` is confined to the workspace root; for local file analysis (PDF, PNG, images) set `dir` to the file's directory inside that root. " +
+          "`yolo: true` additionally requires `sandbox: true` and host consent; it auto-approves every tool inside agy. " +
           "`sandbox: true` is compatible with file reads (restricts only terminal commands).",
         schema: AGY_V2_TOOL_SCHEMA,
         input: AGY_V2_TOOL_SCHEMA,
@@ -211,34 +218,18 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
             return formatV2Error(err);
           }
         },
-      };
-
-      if (typeof editor?.add === "function") {
-        editor.add(toolDef);
-      } else if (Array.isArray(editor)) {
-        editor.push(toolDef);
-      } else if (editor && typeof editor === "object") {
-        editor.agy = toolDef;
-      }
+      }, defined);
     });
   }
 
   if (typeof ctx.command?.transform === "function") {
     await ctx.command.transform((editor: any) => {
       const cmd = createAgyCommand();
-      const cmdDef = {
+      upsertRegistryEntry(editor, "agy", {
         name: "agy",
         description: cmd.description,
         template: cmd.template,
-      };
-
-      if (typeof editor?.add === "function") {
-        editor.add(cmdDef);
-      } else if (Array.isArray(editor)) {
-        editor.push(cmdDef);
-      } else if (editor && typeof editor === "object") {
-        editor.agy = cmdDef;
-      }
+      }, defined);
     });
   }
 }

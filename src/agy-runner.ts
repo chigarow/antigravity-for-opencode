@@ -1,5 +1,6 @@
 import { spawn } from "bun";
 import { mkdtemp, chmod, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { tmpdir } from "os";
 import path from "node:path";
 
@@ -17,6 +18,19 @@ export type Tier =
   | "argon-4-med"
   | "argon-4-lo";
 
+/**
+ * Host-owned authority policy. Everything here comes from the plugin
+ * configuration or the process environment, never from the model's
+ * tool arguments — that separation is what makes `dir` and `yolo`
+ * containment meaningful.
+ */
+export interface AgyPolicy {
+  /** Absolute, canonical directory that `dir` must stay inside. */
+  workspaceRoot: string;
+  /** Whether `yolo: true` may be honoured at all (still requires sandbox). */
+  allowYolo: boolean;
+}
+
 export interface AgyOptions {
   prompt: string;
   tier?: Tier;
@@ -29,6 +43,8 @@ export interface AgyOptions {
   conversation?: string;
   model?: string; // exact model name override (future-proof)
   signal?: AbortSignal;
+  /** Overrides for the host policy; omitted fields fall back to env/cwd. */
+  policy?: Partial<AgyPolicy>;
 }
 
 export interface AgyResult {
@@ -73,6 +89,119 @@ const TIER_MODEL: Record<Tier, string> = {
   "argon-4-lo": "Gemini 4 Argon (Low)",
 };
 
+/** Environment variables the delegated child is allowed to inherit. */
+const CHILD_ENV_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "TERM",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "NO_COLOR",
+  "FORCE_COLOR",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_STATE_HOME",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+] as const;
+
+/**
+ * Build the child environment from an explicit allowlist.
+ *
+ * The host process environment routinely carries provider keys, cloud
+ * credentials, and CI secrets that a delegated, model-driven child has no
+ * business reading. Only names on {@link CHILD_ENV_ALLOWLIST} survive.
+ */
+export function buildChildEnv(
+  baseEnv: Record<string, string | undefined> = process.env
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of CHILD_ENV_ALLOWLIST) {
+    const value = baseEnv[name];
+    if (typeof value === "string") env[name] = value;
+  }
+  return env;
+}
+
+/**
+ * Resolve the host policy: explicit overrides win, then `AGY_WORKSPACE_ROOT`
+ * / `AGY_ALLOW_YOLO=1`, then the current working directory and "no yolo".
+ */
+export function resolvePolicy(overrides: Partial<AgyPolicy> = {}): AgyPolicy {
+  const root = overrides.workspaceRoot ?? process.env.AGY_WORKSPACE_ROOT ?? process.cwd();
+  return {
+    workspaceRoot: canonicalDir(root, "workspace root"),
+    allowYolo: overrides.allowYolo ?? process.env.AGY_ALLOW_YOLO === "1",
+  };
+}
+
+function canonicalDir(dir: string, what: string): string {
+  try {
+    return realpathSync(path.resolve(dir));
+  } catch {
+    throw new AgyError(
+      `${what} is not an existing directory: ${dir}`,
+      "DIR_NOT_ALLOWED",
+      { dir }
+    );
+  }
+}
+
+/**
+ * Canonicalize `dir` and require it to be the workspace root or a
+ * descendant. Symlinks are resolved before the check, so a link inside the
+ * root that points outside is rejected. Anything that is not a real
+ * directory (missing path, dangling link, flag-like value) is rejected
+ * rather than forwarded to the child's argv.
+ */
+export function confinedDir(dir: string, policy: AgyPolicy): string {
+  if (typeof dir !== "string" || dir.length === 0) {
+    throw new AgyError("dir must be a non-empty string", "DIR_NOT_ALLOWED", { dir });
+  }
+  if (dir.startsWith("-") || dir.includes("\0")) {
+    throw new AgyError("dir must not be flag-like or contain NUL", "DIR_NOT_ALLOWED", { dir });
+  }
+  const real = canonicalDir(dir, "dir");
+  const root = policy.workspaceRoot;
+  if (real !== root && !real.startsWith(root + path.sep)) {
+    throw new AgyError(
+      `dir is outside the approved workspace: ${dir}`,
+      "DIR_NOT_ALLOWED",
+      { dir, workspaceRoot: root }
+    );
+  }
+  return real;
+}
+
+/**
+ * A conversation ID is echoed back to the parent model and later becomes a
+ * `--conversation` argv value, so it must not be able to carry shell-,
+ * flag-, path-, or markup-shaped payloads. Accepts the three documented
+ * shapes: `ses_…`, a UUID, or a plain slug of 6-64 characters.
+ */
+const CONVERSATION_ID_RE =
+  /^(?:ses_[A-Za-z0-9_-]{4,64}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[A-Za-z0-9][A-Za-z0-9_-]{5,63})$/;
+
+export function isValidConversationId(id: unknown): id is string {
+  if (typeof id !== "string") return false;
+  if (id.startsWith("-") || id.includes("..")) return false;
+  if (/[\s"'/\\<>]/.test(id)) return false;
+  return CONVERSATION_ID_RE.test(id);
+}
+
 /**
  * Hard upper bound for any timeout that flows through `normalizeTimeout`.
  * Any value that normalizes above 4h is silently clamped to "4h".
@@ -82,115 +211,68 @@ const TIER_MODEL: Record<Tier, string> = {
 const MAX_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 
 /**
- * Normalize timeout input to a string agy understands (e.g. "5m", "300s", "4h").
+ * Normalize and validate a timeout.
  *
- * Uniform default when no explicit timeout is provided: "15m" for every
- * tier (all 12 tiers share one default; no per-tier branching).
+ * Default when omitted: "15m" for every tier.
  *
- * Accepts:
- *  - undefined / null            → "15m"
- *  - number (treated as ms)      → coerced (300000 → "5m", 60000 → "1m")
- *  - string of digits only       → coerced as ms
- *  - duration string ("5m", "10m", "300s", "1h", …) → passed through
+ * Accepts exactly two shapes:
+ *  - a positive integer (ms): 300000 → "5m"
+ *  - a positive duration string: "5m", "300s", "2h", "500ms"
  *
- * Hard upper bound: any normalized value that exceeds 4h
- * (MAX_TIMEOUT_MS) is silently clamped to "4h". Values that cannot be
- * parsed back to ms (e.g. "abc") are returned unchanged so the runner
- * surfaces them as before.
+ * Everything else — `0`, `"0s"`, negatives, `NaN`, `"5.5h"`, `"1d"`,
+ * `"abc"` — throws `AgyError { code: "INVALID_TIMEOUT" }`. The old
+ * "pass unparseable strings through" behaviour let a caller put an
+ * arbitrary token into `--print-timeout`, so it is gone.
  *
- * Throws `AgyError { code: "INVALID_TIMEOUT" }` for numeric inputs that
- * are not finite (NaN, ±Infinity) or negative. A literal `0` is preserved
- * as "0s" — historically used to disable the timeout for short tasks and
- * the policy is locked in by tests. Strings are accepted as-is; "abc" or
- * negative-duration strings pass through and surface as a downstream
- * classification, not as INVALID_TIMEOUT, so user-facing surface stays
- * stable.
+ * Any valid duration above 4h is clamped to "4h".
  */
 function normalizeTimeout(t: string | number | undefined): string {
   if (t == null) return "15m";
 
-  // Validate + coerce. The cap is applied uniformly to whatever this
-  // returns so a 999_999_999 numeric input is clamped to "4h" the same
-  // way a "100h" string is.
-  const raw = normalizeRawTimeoutValue(t);
-  return clampOversizedTimeout(raw);
-}
-
-/**
- * Coerce the raw timeout input to a string form, throwing on invalid
- * numeric values. The result may still exceed 4h — the caller applies
- * the cap (see `clampOversizedTimeout`).
- */
-function normalizeRawTimeoutValue(t: string | number | undefined): string {
-  if (typeof t === "number") return normalizeNumericTimeout(t);
-  const s = String(t).trim();
-  if (/^\d+$/.test(s)) return normalizeDigitStringTimeout(s);
-  return s;
-}
-
-/**
- * Validate a numeric timeout and return the string form. Throws
- * `AgyError { code: "INVALID_TIMEOUT" }` for NaN, ±Infinity, or negatives.
- * Returns "0s" for the literal 0 (preserves the historical "no timeout"
- * policy locked in by tests).
- */
-function normalizeNumericTimeout(t: number): string {
-  if (!Number.isFinite(t)) {
-    throw new AgyError(
-      `invalid timeout: ${t} (must be a finite number of ms, or a duration string like "5m")`,
-      "INVALID_TIMEOUT",
-      { value: t }
-    );
+  if (typeof t === "number") {
+    if (!Number.isFinite(t) || !Number.isInteger(t) || t <= 0) {
+      throw invalidTimeout(t);
+    }
+    return clampOversizedTimeout(t >= 60_000 ? Math.ceil(t / 60_000) + "m" : Math.ceil(t / 1_000) + "s");
   }
-  if (t < 0) {
-    throw new AgyError(
-      `invalid timeout: ${t} (must be ≥ 0)`,
-      "INVALID_TIMEOUT",
-      { value: t }
-    );
+
+  if (typeof t !== "string") throw invalidTimeout(t);
+  const s = t.trim();
+
+  if (/^[1-9]\d*$/.test(s)) {
+    const n = Number(s);
+    return clampOversizedTimeout(n >= 60_000 ? Math.ceil(n / 60_000) + "m" : Math.ceil(n / 1_000) + "s");
   }
-  // 0 → "0s" by policy; 4h cap is applied by the caller.
-  if (t >= 60_000) return Math.ceil(t / 60_000) + "m";
-  return Math.ceil(t / 1_000) + "s";
+  if (/^[1-9]\d*\s*(h|m|s|ms)$/i.test(s)) {
+    return clampOversizedTimeout(s.replace(/\s+/g, "").toLowerCase());
+  }
+  throw invalidTimeout(t);
+}
+
+function invalidTimeout(value: unknown): AgyError {
+  return new AgyError(
+    `invalid timeout: ${JSON.stringify(value)} (use a positive integer of ms, or a duration like "5m", "300s", "2h")`,
+    "INVALID_TIMEOUT",
+    { value }
+  );
 }
 
 /**
- * Validate a digit-only string and return the string form. Same rules as
- * the numeric path: NaN / Infinity / negatives throw. "0" → "0s".
- */
-function normalizeDigitStringTimeout(s: string): string {
-  const n = Number(s);
-  if (!Number.isFinite(n) || n < 0) {
-    throw new AgyError(
-      `invalid timeout: "${s}" (digit-only strings must be a non-negative ms count)`,
-      "INVALID_TIMEOUT",
-      { value: s }
-    );
-  }
-  if (n >= 60_000) return Math.ceil(n / 60_000) + "m";
-  return Math.ceil(n / 1_000) + "s";
-}
-
-/**
- * If `result` parses back to a duration > 4h, return "4h". Otherwise
- * return `result` unchanged. This is the safety cap — a parsed-back
- * guard means any path that produces a recognizable duration string
- * (numeric ms, digit-string ms, or a unit-suffixed literal) is clamped.
- * Unparseable inputs (e.g. "abc") pass through unchanged.
+ * Clamp a normalized duration above 4h down to "4h". The strict parser
+ * guarantees the input matches `<positive><unit>`, so no unparseable
+ * string can reach this function.
  */
 function clampOversizedTimeout(result: string): string {
-  if (!result) return result;
-  const m = result.match(/^(\d+)\s*(h|m|s|ms)$/i);
+  const m = result.match(/^(\d+)(h|m|s|ms)$/);
   if (!m) return result;
   const n = Number(m[1]);
-  const unit = m[2].toLowerCase();
+  const unit = m[2];
   const ms =
     unit === "h" ? n * 3_600_000
     : unit === "m" ? n * 60_000
     : unit === "s" ? n * 1_000
     : n; // "ms"
-  if (ms > MAX_TIMEOUT_MS) return "4h";
-  return result;
+  return ms > MAX_TIMEOUT_MS ? "4h" : result;
 }
 
 /**
@@ -240,16 +322,6 @@ function computeSuggestedNextTimeout(durationMs: number, used: string): string {
 }
 
 /**
- * Validate that a captured conversation/session ID looks plausible.
- * Real agy IDs always contain alphanumeric characters (UUIDs, ses_...,
- * project-xxx shapes). Pure-punctuation captures like `"""` are noise
- * from Go log formatting and must be rejected.
- */
-function isPlausibleConversationId(id: string): boolean {
-  return id.length > 0 && /[A-Za-z0-9]/.test(id);
-}
-
-/**
  * Strip trailing (and leading) punctuation that Go log formatting appends
  * to captured IDs — e.g. `2e456db3-...-54159bf7eb49,` or `ses_abc")`.
  * Hyphens and underscores inside the ID are preserved.
@@ -259,114 +331,249 @@ function normalizeConversationId(id: string): string {
 }
 
 /**
- * Normalize a raw capture, then validate the result is still plausible.
- * Returns the cleaned ID, or undefined if nothing usable remains after
- * normalization.
+ * Normalize a raw capture, then require the documented ID shape.
+ * Returns the cleaned ID, or undefined if it is not a valid selector.
  */
 function extractValidId(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const cleaned = normalizeConversationId(raw);
-  return isPlausibleConversationId(cleaned) ? cleaned : undefined;
+  return isValidConversationId(cleaned) ? cleaned : undefined;
 }
 
 /**
- * Extract a non-empty conversation ID from a chunk of agy log content.
- * Pure: no I/O, no side effects. Order of patterns is priority order — the most
- * specific / explicit form wins, so `conversationID="..."` is preferred over a
- * bare UUID that just happens to follow the word "conversation".
- * Patterns matched (case-insensitive):
- *   1. conversationID="<id>"
- *   2. conversationID=<id>      (unquoted)
- *   3. \bconversation="<id>"   (quoted, word boundary)
- *   4. \bconversation=<id>     (unquoted, word boundary)
- *   5. "Conversation using project ID: <id>"
- *   6. "conversation <uuid>"   (UUID-shaped token right after the word)
- * Returns undefined if nothing matches.
- * Captures are normalized: trailing/leading punctuation (commas, periods,
- * semicolons, quotes, brackets) is stripped before validation.
+ * Match sets that agy uses to report a conversation, in priority order:
+ * the most specific / explicit form wins. Within one pattern the LAST
+ * valid match wins, so content echoed into the log early (a prompt, an
+ * ingested document) cannot shadow the session ID agy records later.
+ */
+const CONVERSATION_PATTERNS: readonly RegExp[] = [
+  /conversationID\s*=\s*"([^"\s]+)"/gi,
+  /conversationID\s*=\s*(\S+)/gi,
+  /\bconversation\s*=\s*"([^"\s]+)"/gi,
+  /\bconversation\s*=\s*(\S+)/gi,
+  /Conversation using project ID:\s*(\S+)/gi,
+  /conversation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+];
+
+/**
+ * Extract a conversation ID from a chunk of agy log content.
+ * Pure: no I/O, no side effects. See {@link CONVERSATION_PATTERNS} for the
+ * priority order and the last-match rule.
  */
 export function parseConversationIdFromLog(log: string): string | undefined {
   if (!log) return undefined;
-
-  // 1. conversationID="<id>" — most explicit, quoted.
-  let id = extractValidId(log.match(/conversationID\s*=\s*"([^"\s]+)"/i)?.[1]);
-  if (id) return id;
-
-  // 2. conversationID=<id> — unquoted, bounded by whitespace.
-  id = extractValidId(log.match(/conversationID\s*=\s*(\S+)/i)?.[1]);
-  if (id) return id;
-
-  // 3. \bconversation="<id>" — quoted. Word boundary prevents matching
-  // inside "myconversation" or "aconversation=".
-  id = extractValidId(
-    log.match(/\bconversation\s*=\s*"([^"\s]+)"/i)?.[1]
-  );
-  if (id) return id;
-
-  // 4. \bconversation=<id> — unquoted.
-  id = extractValidId(log.match(/\bconversation\s*=\s*(\S+)/i)?.[1]);
-  if (id) return id;
-
-  // 5. "Conversation using project ID: <id>" — Go log style.
-  id = extractValidId(
-    log.match(/Conversation using project ID:\s*(\S+)/i)?.[1]
-  );
-  if (id) return id;
-
-  // 6. "conversation <uuid>" — UUID-shaped token right after the word.
-  id = extractValidId(
-    log.match(
-      /conversation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-    )?.[1]
-  );
-  if (id) return id;
-
+  for (const pattern of CONVERSATION_PATTERNS) {
+    let found: string | undefined;
+    for (const match of log.matchAll(pattern)) {
+      const id = extractValidId(match[1]);
+      if (id) found = id;
+    }
+    if (found) return found;
+  }
   return undefined;
 }
 
-export function buildAgyArgs(opts: AgyOptions): string[] {
+function assertBoolean(opts: AgyOptions, key: "yolo" | "sandbox" | "continue"): void {
+  const value = opts[key];
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new AgyError(
+      `${key} must be a boolean, received ${JSON.stringify(value)}`,
+      "INVALID_ARGUMENT",
+      { argument: key }
+    );
+  }
+}
+
+/** Reject argv-shaped values before they can become another flag. */
+function assertNotFlagLike(name: string, value: string | undefined): void {
+  if (value === undefined) return;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new AgyError(`${name} must be a non-empty string`, "INVALID_ARGUMENT", { argument: name });
+  }
+  if (value.startsWith("-") || value.includes("\0")) {
+    throw new AgyError(`${name} must not be flag-like or contain NUL`, "INVALID_ARGUMENT", {
+      argument: name,
+    });
+  }
+}
+
+/** The model name the caller's tier (or explicit override) resolves to. */
+function modelUsed(opts: AgyOptions): string {
+  return opts.model ?? TIER_MODEL[opts.tier ?? "flash-3.8-med"];
+}
+
+interface PreparedAgy {
+  args: string[];
+  policy: AgyPolicy;
+  /** Directory the child runs in: the granted dir, else the workspace root. */
+  cwd: string;
+  timeout: string;
+}
+
+/**
+ * Validate everything the caller supplied and build the child invocation.
+ * All authority inputs (`dir`, `yolo`) are checked against the host policy
+ * here, so both the argv builder and the runner share one gate.
+ */
+function prepareAgy(opts: AgyOptions): PreparedAgy {
+  if (typeof opts.prompt !== "string" || opts.prompt.length === 0) {
+    throw new AgyError("prompt must be a non-empty string", "INVALID_ARGUMENT");
+  }
+  assertBoolean(opts, "yolo");
+  assertBoolean(opts, "sandbox");
+  assertBoolean(opts, "continue");
+
   // Validate explicit tier before model selection so an exact model override
-  // cannot make an invalid tier valid (v0.8.0 invariant 8).
-  if (opts.tier !== undefined && !(opts.tier in TIER_MODEL)) {
+  // cannot make an invalid tier valid, and so prototype-chain keys
+  // ("constructor", "__proto__") cannot pass as tiers.
+  if (opts.tier !== undefined) {
+    if (typeof opts.tier !== "string" || !Object.hasOwn(TIER_MODEL, opts.tier)) {
+      throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
+    }
+  }
+  const model = modelUsed(opts);
+  if (typeof model !== "string" || model.length === 0) {
     throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
   }
-  const model = opts.model || TIER_MODEL[opts.tier ?? "flash-3.8-med"];
-  if (!model) {
-    throw new AgyError(`Unknown tier: ${opts.tier}`, "INVALID_TIER");
-  }
-  if (opts.continue && opts.conversation) {
+  assertNotFlagLike("model", opts.model);
+  assertNotFlagLike("project", opts.project);
+
+  if (opts.continue === true && opts.conversation !== undefined) {
     throw new AgyError("pass either continue or conversation, not both", "INVALID_ARGS");
+  }
+  if (opts.conversation !== undefined) {
+    assertNotFlagLike("conversation", opts.conversation);
+    if (!isValidConversationId(opts.conversation)) {
+      throw new AgyError("Invalid conversation ID", "INVALID_CONVERSATION_ID");
+    }
+  }
+
+  const policy = resolvePolicy(opts.policy);
+  const dir = opts.dir !== undefined ? confinedDir(opts.dir, policy) : undefined;
+
+  // yolo is auto-approval of every tool inside the child. It requires both
+  // host consent and the terminal sandbox, so a single model-chosen flag can
+  // never grant it on its own.
+  if (opts.yolo === true && !(policy.allowYolo && opts.sandbox === true)) {
+    throw new AgyError(
+      "yolo requires configured consent (AGY_ALLOW_YOLO=1 or policy.allowYolo) plus sandbox: true",
+      "YOLO_NOT_APPROVED"
+    );
   }
 
   const timeout = normalizeTimeout(opts.timeout);
+  const args: string[] = ["--model", model, "--print-timeout", timeout];
 
-  const args: string[] = [
-    "--model",
-    model,
-    "--print-timeout",
-    timeout,
-  ];
-
-  if (opts.dir) args.push("--add-dir", opts.dir);
+  if (dir) args.push("--add-dir", dir);
   if (opts.project) args.push("--project", opts.project);
-  if (opts.yolo) args.push("--dangerously-skip-permissions");
-  if (opts.sandbox) args.push("--sandbox");
-  if (opts.continue) args.push("--continue");
+  if (opts.yolo === true) args.push("--dangerously-skip-permissions");
+  if (opts.sandbox === true) args.push("--sandbox");
+  if (opts.continue === true) args.push("--continue");
   if (opts.conversation) args.push("--conversation", opts.conversation);
 
   args.push("-p", opts.prompt);
-  return args;
+  return { args, policy, cwd: dir ?? policy.workspaceRoot, timeout };
+}
+
+export function buildAgyArgs(opts: AgyOptions): string[] {
+  return prepareAgy(opts).args;
 }
 
 export type SpawnFn = typeof spawn;
+
+/** Hard caps on what a chatty (or hostile) child can make the host buffer. */
+export const MAX_STDOUT_BYTES = 100_000;
+/** Cap on the stderr copy surfaced to callers; classification captures more. */
+export const MAX_STDERR_BYTES = 2_000;
+/** Bounded stderr capture kept in memory for error classification only. */
+const MAX_STDERR_CAPTURE_BYTES = 64_000;
+
+/** How long a terminated child gets to exit before SIGKILL. */
+const KILL_GRACE_MS = 2_000;
+
+/**
+ * Terminate the child: SIGTERM to the child process directly, then SIGKILL
+ * after a short grace. The spawn is not detached, so the child has no own
+ * process group — a negative-pid signal would hit the caller's group — which
+ * is why no group semantics are claimed or attempted here. The escalation is
+ * cancelled as soon as the child is observed to exit, so a child that
+ * honoured SIGTERM is never SIGKILLed (PID/group reuse hazard).
+ */
+function terminateChild(proc: any): void {
+  const signal = (sig: NodeJS.Signals) => {
+    try {
+      proc.kill(sig);
+    } catch {
+      // already gone
+    }
+  };
+  signal("SIGTERM");
+  const escalation = setTimeout(() => signal("SIGKILL"), KILL_GRACE_MS);
+  escalation.unref?.();
+  const exited = proc?.exited;
+  if (typeof exited?.then === "function") {
+    exited.then(
+      () => clearTimeout(escalation),
+      () => clearTimeout(escalation)
+    );
+  }
+}
+
+/**
+ * Read a child stream into a bounded buffer, draining (and counting) the
+ * rest so the child never blocks on a full pipe.
+ */
+async function readCapped(
+  stream: ReadableStream<Uint8Array>,
+  max: number
+): Promise<{ text: string; dropped: number }> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let kept = 0;
+  let dropped = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value || value.byteLength === 0) continue;
+    const room = max - kept;
+    if (room <= 0) {
+      dropped += value.byteLength;
+      continue;
+    }
+    const slice = value.byteLength > room ? value.subarray(0, room) : value;
+    chunks.push(slice);
+    kept += slice.byteLength;
+    dropped += value.byteLength - slice.byteLength;
+  }
+  const merged = new Uint8Array(kept);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(merged), dropped };
+}
+
+/**
+ * Cap a captured string for display, appending an explicit truncation
+ * marker when anything was cut, so downstream classification-vs-surfacing
+ * gaps are visible instead of silent.
+ * ponytail: the marker counts chars of the captured decode, not raw stream
+ * bytes; switch to a byte count if precision ever matters.
+ */
+function truncateForDisplay(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars)}\n... [truncated ${text.length - maxChars} chars]`;
+}
 
 export async function runAgy(
   opts: AgyOptions,
   spawnFn: SpawnFn = spawn
 ): Promise<AgyResult> {
-  const args = buildAgyArgs(opts);
+  const prepared = prepareAgy(opts);
+  const args = prepared.args;
   const start = Date.now();
-  const requestedConvId = opts.conversation?.trim() || undefined;
+  const requestedConvId = opts.conversation;
 
   // Always tee agy's log to a unique temp file inside a fresh per-run 0700
   // directory under the OS temp dir. mkdtemp atomically creates a unique
@@ -374,6 +581,8 @@ export async function runAgy(
   // is more permissive. The entire directory is removed in finally.
   const logDir = await mkdtemp(path.join(tmpdir(), "opencode-agy-"));
   let abortHandler: (() => void) | undefined;
+  let hostTimer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
   try {
     await chmod(logDir, 0o700);
     const logFile = path.join(logDir, "agy.log");
@@ -384,6 +593,8 @@ export async function runAgy(
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
+        env: buildChildEnv(),
+        cwd: prepared.cwd,
       });
     } catch (err: any) {
       if (err?.code === "ENOENT" || String(err).toLowerCase().includes("not found")) {
@@ -391,7 +602,7 @@ export async function runAgy(
           "agy CLI not found on PATH",
           "AGY_NOT_FOUND",
           {
-            original: String(err),
+            original: scrubSecrets(String(err)),
             durationMs: Date.now() - start,
             ...convIdField(requestedConvId),
           }
@@ -402,22 +613,37 @@ export async function runAgy(
 
     if (opts.signal) {
       if (opts.signal.aborted) {
-        proc.kill();
+        terminateChild(proc);
       } else {
-        abortHandler = () => proc.kill();
+        abortHandler = () => {
+          terminateChild(proc);
+        };
         opts.signal.addEventListener("abort", abortHandler, { once: true });
       }
     }
 
+    // Host-side backstop: agy's --print-timeout is advisory from this
+    // process's point of view, so enforce the same budget locally.
+    hostTimer = setTimeout(() => {
+      timedOut = true;
+      terminateChild(proc);
+    }, parseTimeoutMs(prepared.timeout) + 1_000);
+    hostTimer.unref?.();
+
     proc.stdin.end();
 
     const [out, err, exit] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
+      readCapped(proc.stdout, MAX_STDOUT_BYTES),
+      readCapped(proc.stderr, MAX_STDERR_CAPTURE_BYTES),
       proc.exited,
     ]);
 
     const durationMs = Date.now() - start;
+    const stdoutText = out.dropped > 0 ? `${out.text}\n... [truncated ${out.dropped} bytes]` : out.text;
+    // Classification runs on the full capture; the surfaced copy is capped
+    // and carries an explicit truncation marker when it was cut.
+    const stderrRaw = err.text;
+    const stderrText = truncateForDisplay(stderrRaw, MAX_STDERR_BYTES);
 
     // Best-effort: read the temp log and pull the conversation ID. The log
     // may be missing (e.g. spawn-ENOENT path, or agy never wrote anything)
@@ -425,19 +651,24 @@ export async function runAgy(
     const extractedConvId = await readConvIdFromLog(logFile);
     const convId = requestedConvId || extractedConvId;
 
-    // Extract the timeout value agy actually saw on the command line. We
-    // echo this on EVERY error from a real spawn (TIMEOUT, AGY_FAILED,
-    // EMPTY_OUTPUT, and the general classified path) so callers can see
-    // the configured budget without re-parsing args themselves. The
-    // spawn-ENOENT path is excluded because it never reaches this point.
-    const tIdx = args.indexOf("--print-timeout");
-    const used = tIdx >= 0 ? args[tIdx + 1] : undefined;
-    const timeoutField: Record<string, unknown> = used ? { timeout: used } : {};
+    // The budget agy actually saw, echoed on every error from a real spawn
+    // (TIMEOUT, AGY_FAILED, EMPTY_OUTPUT, and the general classified path).
+    const used = prepared.timeout;
+    const timeoutField: Record<string, unknown> = { timeout: used };
+
+    if (timedOut) {
+      throw new AgyError("agy exceeded its timeout (host timer)", "TIMEOUT", {
+        ...timeoutField,
+        durationMs,
+        suggestedNextTimeout: computeSuggestedNextTimeout(durationMs, used),
+        ...convIdField(convId),
+      });
+    }
 
     if (exit !== 0) {
-      const classified = classifyError(err, exit);
+      const classified = classifyError(stderrRaw, exit);
       if (classified) {
-        if (classified.code === "TIMEOUT" && used) {
+        if (classified.code === "TIMEOUT") {
           const suggestedNextTimeout = computeSuggestedNextTimeout(durationMs, used);
           throw new AgyError(
             classified.message,
@@ -468,7 +699,7 @@ export async function runAgy(
         "AGY_FAILED",
         {
           exitCode: exit,
-          stderr: scrubSecrets(truncate(err, 2000)),
+          stderr: scrubSecrets(stderrText),
           ...timeoutField,
           durationMs,
           ...convIdField(convId),
@@ -476,10 +707,9 @@ export async function runAgy(
       );
     }
 
-    const trimmed = out.trim();
-    if (!trimmed) {
+    if (!stdoutText.trim()) {
       throw new AgyError("agy returned empty output", "EMPTY_OUTPUT", {
-        model: opts.model || TIER_MODEL[opts.tier ?? "flash-3.8-med"],
+        model: modelUsed(opts),
         ...timeoutField,
         durationMs,
         ...convIdField(convId),
@@ -487,14 +717,15 @@ export async function runAgy(
     }
 
     const result: AgyResult = {
-      stdout: truncate(out, 100_000),
-      stderr: scrubSecrets(truncate(err, 2000)),
+      stdout: scrubSecrets(stdoutText),
+      stderr: scrubSecrets(stderrText),
       exitCode: exit,
       durationMs,
     };
     if (convId) result.conversationId = convId;
     return result;
   } finally {
+    if (hostTimer) clearTimeout(hostTimer);
     if (opts.signal && abortHandler) {
       opts.signal.removeEventListener("abort", abortHandler);
     }
@@ -513,12 +744,18 @@ function convIdField(convId: string | undefined): Record<string, unknown> {
 }
 
 /**
- * Read the agy log file and extract the conversation ID, swallowing any I/O
- * or parse errors. Pure best-effort: a missing/unreadable log means "no ID".
+ * Read the last 64 KiB of the agy log and extract the conversation ID,
+ * swallowing any I/O or parse errors. The tail bound matters: the child
+ * chooses how much it writes, and the ID is a single line near the end.
  */
+const LOG_TAIL_BYTES = 65_536;
+
 async function readConvIdFromLog(logFile: string): Promise<string | undefined> {
   try {
-    const content = await Bun.file(logFile).text();
+    const file = Bun.file(logFile);
+    const size = file.size;
+    const start = Math.max(0, size - LOG_TAIL_BYTES);
+    const content = await file.slice(start, size).text();
     return parseConversationIdFromLog(content);
   } catch {
     return undefined;
@@ -562,26 +799,52 @@ function classifyError(stderr: string, exitCode: number): AgyError | null {
   return null;
 }
 
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max) + `\n... [truncated ${text.length - max} chars]`;
-}
-
 /**
- * Best-effort secret scrubbing for stderr / logs before surfacing in results or errors.
- * Replaces common token patterns with [REDACTED].
+ * Best-effort secret scrubbing for anything shown to the parent model.
+ * Replaces common token shapes with [REDACTED].
  * Classification logic receives raw stderr.
  */
 export function scrubSecrets(text: string): string {
   if (!text) return text;
-  let s = text;
-  // Bearer tokens and Authorization headers
-  s = s.replace(/\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/gi, "Bearer [REDACTED]");
-  s = s.replace(/Authorization:\s*Bearer\s+[^\s]+/gi, "Authorization: Bearer [REDACTED]");
-  // Common API key prefixes
-  s = s.replace(/\b(sk-[A-Za-z0-9]+|xox[baprs]-[A-Za-z0-9-]+)/gi, "[REDACTED]");
-  // password= token= secret= api_key= etc (case-insensitive)
-  s = s.replace(/\b(password|token|secret|api[_-]?key|apikey)\s*=\s*[^\s&"']+/gi, "$1=[REDACTED]");
-  return s;
+  return (
+    text
+      // PEM blocks, optionally assigned to a (quoted) key, span lines: redact
+      // from BEGIN through the END line and any closing quote. Must run
+      // before the single-line assignment rule below, which would otherwise
+      // eat only the first line and leak the key body.
+      .replace(
+        /(?:\b[A-Za-z0-9_]*key["']?\s*[:=]\s*)?["']?\s*-----BEGIN[A-Z ]*-----[\s\S]*?-----END [A-Z ]+-----["']?/gi,
+        "[REDACTED]"
+      )
+      // Authorization headers / bearer tokens
+      .replace(/\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/gi, "Bearer [REDACTED]")
+      // OpenAI / Anthropic style keys: whole token, no surviving tail
+      .replace(/\bsk-[A-Za-z0-9_-]{10,}/g, "[REDACTED]")
+      // Google API keys (low minimum: prefer over-redaction to leakage)
+      .replace(/\bAIza[0-9A-Za-z_-]{6,}/g, "[REDACTED]")
+      // GitHub tokens (low minimum: truncated real tokens must still be redacted)
+      .replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{6,}/g, "[REDACTED]")
+      .replace(/\bgithub_pat_[A-Za-z0-9_]{22,}/g, "[REDACTED]")
+      // AWS access key IDs
+      .replace(/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, "[REDACTED]")
+      // Slack tokens (low minimum: short truncated tokens are still secrets)
+      .replace(/\bxox[baprs]-[A-Za-z0-9-]{4,}/g, "[REDACTED]")
+      // Generic assignments: FOO_SECRET=..., token: ..., password=..., api_key=...
+      // (optional quotes around the name so JSON-style keys are covered, e.g.
+      // "aws_secret_access_key": "...")
+      .replace(
+        /\b(password|passwd|pwd|token|secret|api_key|apikey|access_key|private_key|client_secret|[A-Z0-9_]+_(?:KEY|TOKEN|SECRET|PASSWORD))["']?\s*[:=]\s*["']?[^\s"']+["']?/gi,
+        (_match, name: string) => `${name}=[REDACTED]`
+      )
+  );
+}
+
+/**
+ * Render an exception message with secrets removed. Shared by the v1 and v2
+ * error formatters so both surfaces behave the same.
+ */
+export function redactError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return scrubSecrets(message);
 }
 
