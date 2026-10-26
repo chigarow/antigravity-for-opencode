@@ -7,7 +7,7 @@ $ARGUMENTS
 
 Guidelines:
 - Choose one of the twelve versioned tiers, based on task complexity: `flash-3.8-med` (default), `flash-3.8-hi`, `flash-3.8-lo`, `claude-sonnet-5-5-hi`, `claude-sonnet-5-5-med`, `claude-sonnet-5-5-lo`, `claude-opus-5-5-hi`, `claude-opus-5-5-med`, `claude-opus-5-5-lo`, `argon-4-hi`, `argon-4-med`, `argon-4-lo`.
-- Account availability: `flash-3.8-*` and `claude-*-5-5-*` tiers work on Pro and Ultra accounts. `argon-4-*` is Ultra-only today (Pro may unlock it later) and returns `MODEL_NOT_FOUND` on Pro until then.
+- Account availability: `flash-3.8-*` and `claude-*-5-5-*` tiers work on Pro and Ultra accounts. `argon-4-*` needs a paid Pro or Ultra plan on agy 1.4.2+; Pro trial, student, and partner-bundled plans still return `MODEL_NOT_FOUND`. Run `agy models` to list what the signed-in account may use.
 - Dropped tiers (`flash-3.6-*`, `flash-3.7-*`, `pro-3.1-*`, and older names like `flash-3.5*`) have no aliases and return `INVALID_TIER`.
 - `dir` must resolve inside the workspace root (default: the current project). Pointing it outside returns `DIR_NOT_ALLOWED`; pick a directory you genuinely need instead.
 - Use `sandbox: true` for tasks that can run without full filesystem or shell access.

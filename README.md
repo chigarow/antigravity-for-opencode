@@ -177,10 +177,10 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 | `flash-3.8-hi` / `flash-3.8-med` / `flash-3.8-lo` | Gemini 3.8 Flash | Pro & Ultra |
 | `claude-sonnet-5-5-hi` / `claude-sonnet-5-5-med` / `claude-sonnet-5-5-lo` | Claude Sonnet 5.5 | Pro & Ultra |
 | `claude-opus-5-5-hi` / `claude-opus-5-5-med` / `claude-opus-5-5-lo` | Claude Opus 5.5 | Pro & Ultra |
-| `argon-4-hi` / `argon-4-med` / `argon-4-lo` | Gemini 4 Argon | **Ultra only** |
+| `argon-4-hi` / `argon-4-med` / `argon-4-lo` | Gemini 4 Argon | Pro & Ultra |
 
 > [!NOTE]
-> On Pro accounts, `argon-4-*` tiers fail with `MODEL_NOT_FOUND` until Ultra unlocks them. For reference, official Gemini 3.8 Flash limits (documentation facts, not enforced by this plugin): 1,000,000 input/context tokens and 65,536 max output tokens ([model card](https://deepmind.google/models/model-cards/gemini-3-8-flash)).
+> `argon-4-*` needs a paid Pro or Ultra plan on Antigravity CLI v1.4.2+; Pro trial, student, and partner-bundled accounts still get `MODEL_NOT_FOUND`, and the standalone Antigravity IDE cannot select it. For reference, official Gemini 3.8 Flash limits (documentation facts, not enforced by this plugin): 1,000,000 input/context tokens and 65,536 max output tokens ([model card](https://deepmind.google/models/model-cards/gemini-3-8-flash)).
 
 > [!WARNING]
 > `flash-3.5-*`, `flash-3.6-*`, `flash-3.7-*`, and `pro-3.1-*` were removed (Enterprise-only upstream) and have **no aliases** — they return `INVALID_TIER`. Map old names: `flash-3.5-hi/med` → `flash-3.8-hi/med`, and the old default `flash-3.7-med` → `flash-3.8-med`.
@@ -195,7 +195,7 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 - Timeouts are enforced twice: agy's own `--print-timeout`, and a host-side timer that terminates the child (SIGTERM, then SIGKILL after a short grace) if it overruns.
 - The calling agent owns verification: review the diff before trusting delegated changes.
 
-Compatibility is observed empirically against Agy 1.3.5 (check `agy --version`). One caveat: in headless mode agy can expand slash commands when prompt content begins with `/` (or follows a leading newline/tab), so restructure prompts that need literal slash-prefixed content. This plugin intentionally does not expose `--disable-slash-commands`.
+Compatibility is observed empirically against Agy 1.3.5 (`argon-4-*` needs 1.4.2+; check `agy --version`). One caveat: in headless mode agy can expand slash commands when prompt content begins with `/` (or follows a leading newline/tab), so restructure prompts that need literal slash-prefixed content. This plugin intentionally does not expose `--disable-slash-commands`.
 
 The package default-exports the plugin and provides no other runtime exports: opencode's plugin loader invokes every named function export as a plugin server, so extra exports break loading on 1.19.x. For programmatic use, `server`, `setup`, and `id` are attached to the default export; the tool-result builders live in `src/agy-command.ts`.
 

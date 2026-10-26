@@ -319,7 +319,7 @@ describe("buildAgyArgs", () => {
     expect(loArgs).not.toContain("Gemini 3.8 Flash (Medium)");
   });
 
-  // ---- argon-4 family: mapping, 15m default, distinctness, overrides (Ultra-only upstream) ----
+  // ---- argon-4 family: mapping, 15m default, distinctness, overrides (paid Pro & Ultra upstream) ----
 
   test("argon-4-hi maps to Gemini 4 Argon (High) and defaults timeout to 15m", () => {
     const args = buildAgyArgs({ prompt: "x", tier: "argon-4-hi" });
@@ -590,7 +590,7 @@ describe("runAgy (injected spawn)", () => {
     }
   });
 
-  test("classifies exit-1 unknown model as MODEL_NOT_FOUND with Ultra hint for Argon", async () => {
+  test("classifies exit-1 unknown model as MODEL_NOT_FOUND with a plan hint", async () => {
     const fakeSpawn: SpawnFn = (() =>
       createFakeProc({
         stdout: "",
@@ -604,7 +604,7 @@ describe("runAgy (injected spawn)", () => {
     } catch (e: any) {
       expect(e).toBeInstanceOf(AgyError);
       expect(e.code).toBe("MODEL_NOT_FOUND");
-      expect(String(e.details?.hint)).toContain("Ultra");
+      expect(String(e.details?.hint)).toContain("Pro/Ultra");
     }
   });
 

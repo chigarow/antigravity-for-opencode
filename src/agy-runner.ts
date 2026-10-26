@@ -781,15 +781,12 @@ function classifyError(stderr: string, exitCode: number): AgyError | null {
     blob.includes("available models") ||
     blob.includes("agy_error")
   ) {
-    const ultraOnly = blob.includes("argon");
     return new AgyError(
       "agy model not found — requested model is unavailable for this account",
       "MODEL_NOT_FOUND",
       {
         exitCode,
-        hint: ultraOnly
-          ? "Argon 4 tiers require the Ultra plan (plan is resolved server-side from the signed-in account; upgrade or pick another tier)"
-          : "model requires a higher account plan (Pro/Ultra) or was removed upstream; run `agy models` to list the models this account may use",
+        hint: "model requires a higher account plan (Pro/Ultra; trial Pro plans excluded) or was removed upstream; run `agy models` to list the models this account may use",
       }
     );
   }
