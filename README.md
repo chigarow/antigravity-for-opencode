@@ -168,6 +168,21 @@ Invoke agy directly from the OpenCode TUI:
 /agy --tier flash-3.8-lo --yolo --sandbox --dir ./docs "summarize report.pdf"
 ```
 
+### Agent skill
+
+The skill `opencode-agy` teaches the coding agent when delegating to `agy` is worth it, how to pick one of the twelve tiers, how to resume a `TIMEOUT` with `conversation`, the local-file recipe, and the full `AGY_ERROR [CODE]` map. Its source of truth is `skills/opencode-agy/SKILL.md` in the repo; the same file ships in the npm package.
+
+- **OpenCode 2.x:** automatic. Install the plugin and restart OpenCode, and the plugin registers the skill at startup. No extra command, no files written, nothing to clean up on uninstall. Updating the plugin updates the skill; removing the plugin removes it.
+- **OpenCode 1.x:** tool only. OpenCode 1.x has no skill API, so the skill is never registered. Copy it by hand:
+
+```bash
+mkdir -p ~/.config/opencode/skills
+cp -r node_modules/opencode-agy/skills/opencode-agy ~/.config/opencode/skills/
+
+# or
+npx skills add chigarow/antigravity-for-opencode --skill opencode-agy -a opencode -g -y
+```
+
 ## Model tiers
 
 Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the model's reasoning effort. All tiers default to a 15-minute timeout (see [`timeout`](#arguments)).

@@ -1,5 +1,6 @@
 import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets, type AgyResult } from "./agy-runner";
 import { createAgyCommand, upsertRegistryEntry } from "./agy-command";
+import agySkillMarkdown from "../skills/opencode-agy/SKILL.md";
 
 /**
  * Native JSON Schema for OpenCode 2.x tool registration.
@@ -180,6 +181,67 @@ function formatV2Error(err: unknown): AgyV2ToolResult {
 /** v2 registration never overwrites: any defined existing value counts as taken. */
 const defined = (value: unknown): boolean => value !== undefined;
 
+const SKILL_ID = "opencode-agy";
+const SKILL_NAME = "opencode-agy";
+const SKILL_PATH = "/builtin/opencode-agy/SKILL.md";
+
+/**
+ * Split the embedded SKILL.md into its frontmatter `description` and the bare
+ * body. Host builtins take `content` without frontmatter and the renderer
+ * inserts it verbatim, so the YAML must never reach the prompt.
+ */
+function parseSkillMarkdown(markdown: string): { description: string; body: string } {
+  const lines = markdown.split("\n");
+  const close = lines.findIndex((line, i) => i > 0 && line.trim() === "---");
+  if (lines[0]?.trim() !== "---" || close === -1) {
+    throw new Error("SKILL.md must open and close a '---' frontmatter block");
+  }
+  const field = (key: string): string => {
+    const line = lines.slice(1, close).find((l) => l.startsWith(`${key}:`));
+    const value = line?.slice(key.length + 1).trim();
+    if (!value) throw new Error(`SKILL.md frontmatter must set a non-empty '${key}'`);
+    return value;
+  };
+  if (field("name") !== SKILL_NAME) throw new Error(`SKILL.md name must be '${SKILL_NAME}'`);
+  const body = lines.slice(close + 1).join("\n").trim();
+  if (!body) throw new Error("SKILL.md body must not be empty");
+  return { description: field("description"), body };
+}
+
+/**
+ * Upsert the opencode-agy skill (OpenCode 2.x). Never throws: a skill problem
+ * must not fail plugin setup or block tool and command registration.
+ */
+async function registerAgySkill(ctx: any): Promise<void> {
+  if (!ctx || typeof ctx !== "object") return;
+  if (typeof ctx.skill?.transform !== "function") return;
+  try {
+    const { description: SKILL_DESCRIPTION, body: SKILL_CONTENT } = parseSkillMarkdown(agySkillMarkdown);
+    await ctx.skill.transform((editor: any) => {
+      // add overwrites silently, so check first; skip the write when nothing changed.
+      const existing = typeof editor.get === "function" ? editor.get(SKILL_ID) : undefined;
+      if (!existing) {
+        editor.add({ id: SKILL_ID, name: SKILL_NAME, description: SKILL_DESCRIPTION, path: SKILL_PATH, content: SKILL_CONTENT });
+      } else if (
+        existing.content !== SKILL_CONTENT ||
+        existing.description !== SKILL_DESCRIPTION ||
+        existing.name !== SKILL_NAME ||
+        existing.path !== SKILL_PATH
+      ) {
+        editor.update(SKILL_ID, (s: any) => {
+          s.name = SKILL_NAME;
+          s.description = SKILL_DESCRIPTION;
+          s.path = SKILL_PATH;
+          s.content = SKILL_CONTENT;
+        });
+      }
+    });
+  } catch (err: unknown) {
+    // Logged, not rethrown: a skill problem must never fail plugin setup.
+    console.warn("[opencode-agy] skill registration skipped:", err instanceof Error ? err.message : String(err));
+  }
+}
+
 export async function setupV2Plugin(ctx: any): Promise<void> {
   if (!ctx || typeof ctx !== "object") return;
 
@@ -232,4 +294,6 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
       }, defined);
     });
   }
+
+  await registerAgySkill(ctx);
 }
