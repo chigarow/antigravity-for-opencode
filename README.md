@@ -20,7 +20,7 @@ A thin, non-intrusive OpenCode plugin that spawns the official `agy` CLI as a sa
 ## Features
 
 - 🤖 **One tool, one command** — minimal surface: a single `agy` tool, a single `/agy` slash command, one config hook
-- 🧠 **12 model tiers** — Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, and Gemini 4 Argon, each with low / medium / high reasoning effort
+- 🧠 **16 model tiers** — Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 4 Argon, and Gemini 4 Hydrogen, with low / medium / high effort (Hydrogen also offers xhigh)
 - 🔁 **Resumable** — resume any agy conversation by ID or with `continue`, so long tasks survive timeouts
 - 🛡️ **Failures are data** — timeouts, quota, auth errors, and crashes are returned as structured text; the host agent never crashes
 - 🔌 **OpenCode 1.x & 2.x** — dual-export plugin with automatic host detection, plus subprocess cancellation on abort (2.x)
@@ -170,7 +170,7 @@ Invoke agy directly from the OpenCode TUI:
 
 ### Agent skill
 
-The skill `opencode-agy` teaches the coding agent when delegating to `agy` is worth it, how to pick one of the twelve tiers, how to resume a `TIMEOUT` with `conversation`, the local-file recipe, and the full `AGY_ERROR [CODE]` map. Its source of truth is `skills/opencode-agy/SKILL.md` in the repo; the same file ships in the npm package.
+The skill `opencode-agy` teaches the coding agent when delegating to `agy` is worth it, how to pick one of the sixteen tiers, how to resume a `TIMEOUT` with `conversation`, the local-file recipe, and the full `AGY_ERROR [CODE]` map. Its source of truth is `skills/opencode-agy/SKILL.md` in the repo; the same file ships in the npm package.
 
 - **OpenCode 2.x:** automatic. Install the plugin and restart OpenCode, and the plugin registers the skill at startup. No extra command, no files written, nothing to clean up on uninstall. Updating the plugin updates the skill; removing the plugin removes it.
 - **OpenCode 1.x:** tool only. OpenCode 1.x has no skill API, so the skill is never registered. Copy it by hand:
@@ -185,7 +185,7 @@ npx skills add chigarow/antigravity-for-opencode --skill opencode-agy -a opencod
 
 ## Model tiers
 
-Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the model's reasoning effort. All tiers default to a 15-minute timeout (see [`timeout`](#arguments)).
+Sixteen tiers across five models. The `hi` / `med` / `lo` suffix selects the model's reasoning effort; `hydrogen-4-xhigh` picks Gemini 4 Hydrogen's extra XHigh level. All tiers default to a 15-minute timeout (see [`timeout`](#arguments)).
 
 | Tiers | Model | Account |
 | --- | --- | --- |
@@ -193,9 +193,13 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 | `claude-sonnet-5-5-hi` / `claude-sonnet-5-5-med` / `claude-sonnet-5-5-lo` | Claude Sonnet 5.5 | Pro & Ultra |
 | `claude-opus-5-5-hi` / `claude-opus-5-5-med` / `claude-opus-5-5-lo` | Claude Opus 5.5 | Pro & Ultra |
 | `argon-4-hi` / `argon-4-med` / `argon-4-lo` | Gemini 4 Argon | Pro & Ultra |
+| `hydrogen-4-hi` / `hydrogen-4-med` / `hydrogen-4-lo` / `hydrogen-4-xhigh` | Gemini 4 Hydrogen | Depends on plan — check `agy models` |
 
 > [!NOTE]
 > `argon-4-*` needs a paid Pro or Ultra plan on Antigravity CLI v1.4.2+; Pro trial, student, and partner-bundled accounts still get `MODEL_NOT_FOUND`, and the standalone Antigravity IDE cannot select it. For reference, official Gemini 3.8 Flash limits (documentation facts, not enforced by this plugin): 1,000,000 input/context tokens and 65,536 max output tokens ([model card](https://deepmind.google/models/model-cards/gemini-3-8-flash)).
+
+> [!NOTE]
+> `hydrogen-4-*` availability depends on your signed-in plan/account; this plugin makes no entitlement guarantee — run `agy models` to see what your account can use.
 
 > [!WARNING]
 > `flash-3.5-*`, `flash-3.6-*`, `flash-3.7-*`, and `pro-3.1-*` were removed (Enterprise-only upstream) and have **no aliases** — they return `INVALID_TIER`. Map old names: `flash-3.5-hi/med` → `flash-3.8-hi/med`, and the old default `flash-3.7-med` → `flash-3.8-med`.
@@ -210,7 +214,7 @@ Twelve tiers across four models. The `hi` / `med` / `lo` suffix selects the mode
 - Timeouts are enforced twice: agy's own `--print-timeout`, and a host-side timer that terminates the child (SIGTERM, then SIGKILL after a short grace) if it overruns.
 - The calling agent owns verification: review the diff before trusting delegated changes.
 
-Compatibility is observed empirically against Agy 1.3.5 (`argon-4-*` needs 1.4.2+; check `agy --version`). One caveat: in headless mode agy can expand slash commands when prompt content begins with `/` (or follows a leading newline/tab), so restructure prompts that need literal slash-prefixed content. This plugin intentionally does not expose `--disable-slash-commands`.
+Compatibility is observed empirically against Agy 1.3.5 (`argon-4-*` needs 1.4.2+; check `agy --version`). One caveat: in headless mode agy can expand slash commands when prompt content begins with `/` (or follows a leading newline/tab), so restructure prompts that need literal slash-prefixed content. This plugin intentionally does not expose `--disable-slash-commands`. Hydrogen availability varies by account and CLI environment — check `agy models`.
 
 The package default-exports the plugin and provides no other runtime exports: opencode's plugin loader invokes every named function export as a plugin server, so extra exports break loading on 1.19.x. For programmatic use, `server`, `setup`, and `id` are attached to the default export; the tool-result builders live in `src/agy-command.ts`.
 

@@ -6,8 +6,8 @@ Delegate this task to the `agy` tool (runs Antigravity/Gemini in headless mode a
 $ARGUMENTS
 
 Guidelines:
-- Choose one of the twelve versioned tiers, based on task complexity: `flash-3.8-med` (default), `flash-3.8-hi`, `flash-3.8-lo`, `claude-sonnet-5-5-hi`, `claude-sonnet-5-5-med`, `claude-sonnet-5-5-lo`, `claude-opus-5-5-hi`, `claude-opus-5-5-med`, `claude-opus-5-5-lo`, `argon-4-hi`, `argon-4-med`, `argon-4-lo`.
-- Account availability: `flash-3.8-*` works on every account. `claude-*-5-5-*` tiers need a Pro or Ultra plan. `argon-4-*` needs a paid Pro or Ultra plan on agy 1.4.2+ (trial excluded); Pro trial, student, and partner-bundled plans still return `MODEL_NOT_FOUND`. Run `agy models` to list what the signed-in account may use.
+- Choose one of the sixteen versioned tiers, based on task complexity: `flash-3.8-med` (default), `flash-3.8-hi`, `flash-3.8-lo`, `claude-sonnet-5-5-hi`, `claude-sonnet-5-5-med`, `claude-sonnet-5-5-lo`, `claude-opus-5-5-hi`, `claude-opus-5-5-med`, `claude-opus-5-5-lo`, `argon-4-hi`, `argon-4-med`, `argon-4-lo`, `hydrogen-4-hi`, `hydrogen-4-med`, `hydrogen-4-lo`, `hydrogen-4-xhigh`.
+- Account availability: `flash-3.8-*` works on every account. `claude-*-5-5-*` tiers need a Pro or Ultra plan. `argon-4-*` needs a paid Pro or Ultra plan on agy 1.4.2+ (trial excluded); Pro trial, student, and partner-bundled plans still return `MODEL_NOT_FOUND`. Run `agy models` to list what the signed-in account may use. `hydrogen-4-*` = Gemini 4 Hydrogen (four levels incl. `xhigh`); availability depends on your plan/account — run `agy models` to check.
 - Dropped tiers (`flash-3.5-*`, `flash-3.6-*`, `flash-3.7-*`, `pro-3.1-*`) have no aliases and return `INVALID_TIER`.
 - `dir` must resolve inside the workspace root (default: the current project). Pointing it outside returns `DIR_NOT_ALLOWED`; pick a directory you genuinely need instead.
 - Use `sandbox: true` for tasks that can run without full filesystem or shell access.

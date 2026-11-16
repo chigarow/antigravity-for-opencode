@@ -590,7 +590,7 @@ describe("runAgy (injected spawn)", () => {
     }
   });
 
-  test("classifies exit-1 unknown model as MODEL_NOT_FOUND with a plan hint", async () => {
+  test("classifies exit-1 unknown model as MODEL_NOT_FOUND with a neutral hint", async () => {
     const fakeSpawn: SpawnFn = (() =>
       createFakeProc({
         stdout: "",
@@ -604,7 +604,9 @@ describe("runAgy (injected spawn)", () => {
     } catch (e: any) {
       expect(e).toBeInstanceOf(AgyError);
       expect(e.code).toBe("MODEL_NOT_FOUND");
-      expect(String(e.details?.hint)).toContain("Pro/Ultra");
+      expect(String(e.details?.hint)).toContain("agy models");
+      expect(String(e.details?.hint)).not.toMatch(/trial|account|Pro|Ultra|higher account plan|plan lacks/i);
+      expect(e.message).not.toContain("The plan lacks the model");
     }
   });
 

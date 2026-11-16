@@ -23,6 +23,10 @@ const EXPECTED_TIERS = [
   { slug: "argon-4-hi", display: "Gemini 4 Argon (High)" },
   { slug: "argon-4-med", display: "Gemini 4 Argon (Medium)" },
   { slug: "argon-4-lo", display: "Gemini 4 Argon (Low)" },
+  { slug: "hydrogen-4-hi", display: "Gemini 4 Hydrogen (High)" },
+  { slug: "hydrogen-4-med", display: "Gemini 4 Hydrogen (Medium)" },
+  { slug: "hydrogen-4-lo", display: "Gemini 4 Hydrogen (Low)" },
+  { slug: "hydrogen-4-xhigh", display: "Gemini 4 Hydrogen (XHigh)" },
 ];
 
 /** Case arm whose sole pattern is exactly `slug)` (no compound patterns). */
@@ -56,11 +60,32 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
   });
 
-  test("usage help lists the twelve versioned tiers", () => {
+  test.each(EXPECTED_TIERS.filter(({ slug }) => slug.startsWith("hydrogen-4-")))(
+    "$slug passes its exact display label to agy",
+    async ({ slug, display }) => {
+      const tmp = mkdtempSync(join(tmpdir(), "agy-bash-hydrogen-"));
+      const captureFile = join(tmp, "args.txt");
+      const fakeAgy = join(tmp, "agy");
+      writeFileSync(fakeAgy, `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${captureFile}"\necho fake\n`);
+      chmodSync(fakeAgy, 0o755);
+      const proc = Bun.spawn(["bash", SCRIPT_PATH, "--tier", slug, "task"], {
+        env: { ...process.env, PATH: `${tmp}:${process.env.PATH}` },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(await proc.exited).toBe(0);
+      const args = readFileSync(captureFile, "utf8").split("\n");
+      const modelIndex = args.indexOf("--model");
+      expect(modelIndex).toBeGreaterThanOrEqual(0);
+      expect(args[modelIndex + 1]).toBe(display);
+    },
+  );
+
+  test("usage help lists the sixteen versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all twelve tier slugs
+    // When / Then: help documents all sixteen tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
@@ -174,7 +199,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(stderr).toBe("");
   });
 
-  test("usage help tier list is exactly the twelve v0.11.0 tiers", () => {
+  test("usage help tier list is exactly the sixteen v0.11.0 tiers", () => {
     // Given: usage() --tier option line
     const source = readScript();
     const m = source.match(/--tier\s+<([^>]+)>/);

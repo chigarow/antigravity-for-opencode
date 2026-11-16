@@ -2,7 +2,7 @@
 #
 # agy-delegate.sh — standalone wrapper around the Antigravity CLI (`agy`).
 # Matches the behavior of the opencode-agy plugin, with the same review and safety caveats.
-# Supports 12 versioned tiers: flash-3.8-hi, flash-3.8-med, flash-3.8-lo, claude-sonnet-5-5-hi, claude-sonnet-5-5-med, claude-sonnet-5-5-lo, claude-opus-5-5-hi, claude-opus-5-5-med, claude-opus-5-5-lo, argon-4-hi, argon-4-med, and argon-4-lo (default: flash-3.8-med).
+# Supports 16 versioned tiers: flash-3.8-hi, flash-3.8-med, flash-3.8-lo, claude-sonnet-5-5-hi, claude-sonnet-5-5-med, claude-sonnet-5-5-lo, claude-opus-5-5-hi, claude-opus-5-5-med, claude-opus-5-5-lo, argon-4-hi, argon-4-med, argon-4-lo, hydrogen-4-hi, hydrogen-4-med, hydrogen-4-lo, and hydrogen-4-xhigh (default: flash-3.8-med).
 # Timeout default is 15m for every tier; explicit values above 4h are clamped to 4h (enforced here, like the plugin).
 # Safety rules:
 #   - `--yolo` requires `--sandbox` AND host consent (`AGY_ALLOW_YOLO=1`).
@@ -77,7 +77,7 @@ Usage: agy-delegate.sh [options] "prompt"
        echo "prompt" | agy-delegate.sh -
 
 Options:
-  -t, --tier <flash-3.8-hi|flash-3.8-med|flash-3.8-lo|claude-sonnet-5-5-hi|claude-sonnet-5-5-med|claude-sonnet-5-5-lo|claude-opus-5-5-hi|claude-opus-5-5-med|claude-opus-5-5-lo|argon-4-hi|argon-4-med|argon-4-lo>
+  -t, --tier <flash-3.8-hi|flash-3.8-med|flash-3.8-lo|claude-sonnet-5-5-hi|claude-sonnet-5-5-med|claude-sonnet-5-5-lo|claude-opus-5-5-hi|claude-opus-5-5-med|claude-opus-5-5-lo|argon-4-hi|argon-4-med|argon-4-lo|hydrogen-4-hi|hydrogen-4-med|hydrogen-4-lo|hydrogen-4-xhigh>
                                       Tier (default: flash-3.8-med)
   -d, --dir <path>                  Add workspace dir; must resolve (realpath) inside the
                                     workspace root (AGY_WORKSPACE_ROOT when set, else $PWD).
@@ -111,6 +111,10 @@ model_for_tier() {
     argon-4-hi)  echo "Gemini 4 Argon (High)" ;;
     argon-4-med) echo "Gemini 4 Argon (Medium)" ;;
     argon-4-lo)  echo "Gemini 4 Argon (Low)" ;;
+    hydrogen-4-hi)  echo "Gemini 4 Hydrogen (High)" ;;
+    hydrogen-4-med) echo "Gemini 4 Hydrogen (Medium)" ;;
+    hydrogen-4-lo)  echo "Gemini 4 Hydrogen (Low)" ;;
+    hydrogen-4-xhigh) echo "Gemini 4 Hydrogen (XHigh)" ;;
     *) die "unknown tier '$1'" ;;
   esac
 }

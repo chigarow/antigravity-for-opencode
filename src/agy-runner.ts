@@ -16,7 +16,11 @@ export type Tier =
   | "claude-opus-5-5-lo"
   | "argon-4-hi"
   | "argon-4-med"
-  | "argon-4-lo";
+  | "argon-4-lo"
+  | "hydrogen-4-hi"
+  | "hydrogen-4-med"
+  | "hydrogen-4-lo"
+  | "hydrogen-4-xhigh";
 
 /**
  * Host-owned authority policy. Everything here comes from the plugin
@@ -87,6 +91,10 @@ const TIER_MODEL: Record<Tier, string> = {
   "argon-4-hi": "Gemini 4 Argon (High)",
   "argon-4-med": "Gemini 4 Argon (Medium)",
   "argon-4-lo": "Gemini 4 Argon (Low)",
+  "hydrogen-4-hi": "Gemini 4 Hydrogen (High)",
+  "hydrogen-4-med": "Gemini 4 Hydrogen (Medium)",
+  "hydrogen-4-lo": "Gemini 4 Hydrogen (Low)",
+  "hydrogen-4-xhigh": "Gemini 4 Hydrogen (XHigh)",
 };
 
 /** Environment variables the delegated child is allowed to inherit. */
@@ -782,11 +790,11 @@ function classifyError(stderr: string, exitCode: number): AgyError | null {
     blob.includes("agy_error")
   ) {
     return new AgyError(
-      "agy model not found — requested model is unavailable for this account",
+      "agy model not found: requested model is unavailable in this environment",
       "MODEL_NOT_FOUND",
       {
         exitCode,
-        hint: "model requires a higher account plan (Pro/Ultra; trial Pro plans excluded) or was removed upstream; run `agy models` to list the models this account may use",
+        hint: "Run `agy models` to list the models available in this environment.",
       }
     );
   }
