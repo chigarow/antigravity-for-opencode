@@ -4,7 +4,17 @@ import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets } fr
 import { buildAgyToolResult, createAgyCommand, isCommandDef, upsertRegistryEntry } from "./agy-command";
 import { setupV2Plugin } from "./agy-v2";
 
-export interface UniversalAgyPlugin extends Plugin {
+/**
+ * Universal plugin definition shared by OpenCode 1.x and 2.x.
+ *
+ * Both loaders require the default export to be a plain object:
+ * - OpenCode 1.17+ calls `server(input)` to build v1 hooks and ignores `setup`.
+ * - OpenCode 2.x calls `setup(ctx)` (or `effect`) and ignores `server`.
+ *
+ * A callable default export is rejected by 2.x with
+ * `SchemaError(Expected object at ["default"])`.
+ */
+export interface UniversalAgyPlugin {
   id: string;
   server: Plugin;
   setup: (ctx: any) => Promise<void> | void;
@@ -177,10 +187,11 @@ const v1Server: Plugin = async (ctx) => {
   };
 };
 
-const AgyPlugin = v1Server as UniversalAgyPlugin;
-AgyPlugin.id = "opencode-agy";
-AgyPlugin.server = v1Server;
-AgyPlugin.setup = setupV2Plugin;
+const AgyPlugin: UniversalAgyPlugin = {
+  id: "opencode-agy",
+  server: v1Server,
+  setup: setupV2Plugin,
+};
 
 // The entry module's runtime export surface MUST stay exactly { default }:
 // opencode 1.19.4's legacy plugin loader walks every runtime export and
@@ -188,8 +199,8 @@ AgyPlugin.setup = setupV2Plugin;
 // return value into its hooks array. Any named function export whose return
 // value is not a hooks object (setupV2Plugin -> undefined,
 // buildAgyToolResult -> a tool result, ...) becomes a bogus hook and crashes
-// the host. Programmatic consumers reach server/setup through the attached
-// properties on the default export above. Type-only exports (`export type`,
+// the host. Programmatic consumers reach server/setup through properties on
+// the default object above. Type-only exports (`export type`,
 // `export interface`) are erased by the bundler and are allowed. All
 // helpers live in src/agy-runner.ts, src/agy-command.ts and src/agy-v2.ts
 // for tests and internal use; the AGY_V2_TOOL_SCHEMA object stays in

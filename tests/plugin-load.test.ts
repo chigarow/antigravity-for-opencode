@@ -61,9 +61,10 @@ function fakeCtx(): PluginInput {
 }
 
 describe("plugin module shape", () => {
-  test("exports the universal plugin as default (named exports removed: opencode 1.19.4 loader invokes every function export)", async () => {
+  test("exports a plain object default definition (OpenCode 1.17+ server() and 2.x setup())", async () => {
     const mod = await import("../src/index.ts");
-    expect(typeof mod.default).toBe("function");
+    expect(typeof mod.default).toBe("object");
+    expect(typeof mod.default).not.toBe("function");
     expect(mod.default.id).toBe("opencode-agy");
     expect(typeof mod.default.server).toBe("function");
     expect(typeof mod.default.setup).toBe("function");
@@ -71,7 +72,7 @@ describe("plugin module shape", () => {
 
   test("plugin function returns hooks with exactly tool + config", async () => {
     const { default: AgyPlugin } = await import("../src/index.ts");
-    const hooks = await AgyPlugin(fakeCtx());
+    const hooks = await AgyPlugin.server(fakeCtx());
     expect(hooks).toBeDefined();
     expect(hooks.tool).toBeDefined();
     expect(hooks.tool?.agy).toBeDefined();
@@ -84,7 +85,7 @@ describe("plugin module shape", () => {
 describe("plugin config hook behavior", () => {
   async function getConfigHook(): Promise<NonNullable<Hooks["config"]>> {
     const { default: AgyPlugin } = await import("../src/index.ts");
-    const hooks = await AgyPlugin(fakeCtx());
+    const hooks = await AgyPlugin.server(fakeCtx());
     const hook = hooks.config;
     if (hook === undefined) throw new Error("AgyPlugin must expose a config hook");
     return hook;
@@ -169,7 +170,7 @@ describe("plugin config hook behavior", () => {
 describe("agy tool tier schema contracts (v0.8.0)", () => {
   async function tierSchema(): Promise<z.ZodTypeAny> {
     const { default: AgyPlugin } = await import("../src/index.ts");
-    const hooks = await AgyPlugin(fakeCtx());
+    const hooks = await AgyPlugin.server(fakeCtx());
     const toolDefinition = hooks.tool?.agy;
     if (toolDefinition === undefined) throw new Error("AgyPlugin must expose the agy tool");
     return toolDefinition.args.tier;

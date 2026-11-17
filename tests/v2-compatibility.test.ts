@@ -222,7 +222,45 @@ describe("Task 2: Subprocess Cancellation & V2 Adapter", () => {
     expect(commandRegistered).toBeDefined();
     expect(commandRegistered.name).toBe("agy");
     expect(commandRegistered.description).toBeDefined();
-    expect(commandRegistered.template).toBeDefined();
+    expect(typeof commandRegistered.execute).toBe("function");
+    expect(commandRegistered.template).toBeUndefined();
+  });
+
+  test("setupV2Plugin command execution: substitutes $ARGUMENTS and returns the session prompt", async () => {
+    const { setupV2Plugin } = await import("../src/agy-v2");
+
+    let commandRegistered: any = null;
+    const prompts: any[] = [];
+
+    const mockCtx = {
+      command: {
+        transform: async (fn: any) => {
+          await fn({ add: (c: any) => (commandRegistered = c) });
+        },
+      },
+      session: {
+        prompt: async (input: any) => {
+          prompts.push(input);
+          return { messageID: "msg_test" };
+        },
+      },
+    };
+
+    await setupV2Plugin(mockCtx);
+
+    const result = await commandRegistered.execute({
+      sessionID: "ses_test",
+      prompt: { text: "price is $& then $' and $$" },
+      delivery: "queue",
+    });
+
+    expect(result).toEqual({ messageID: "msg_test" });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0].sessionID).toBe("ses_test");
+    expect(prompts[0].delivery).toBe("queue");
+    expect(prompts[0].text).toContain("Delegate this task to the `agy` tool");
+    expect(prompts[0].text).toContain("price is $& then $' and $$");
+    expect(prompts[0].text).not.toContain("$ARGUMENTS");
   });
 
   test("setupV2Plugin(ctx): defensive when ctx.command or transforms are undefined", async () => {
@@ -282,11 +320,13 @@ describe("Task 3: Universal Dual-Export Entrypoint", () => {
     };
   };
 
-  test("Loader Pattern 1: Default callable AgyPlugin(mockV1Ctx)", async () => {
+  test("Loader Pattern 1: default is a plain object; v1 hooks come from server()", async () => {
     const mod = await import("../src/index");
-    expect(typeof mod.default).toBe("function");
+    expect(typeof mod.default).toBe("object");
+    expect(typeof mod.default).not.toBe("function");
+    expect(mod.default.id).toBe("opencode-agy");
 
-    const hooks = await mod.default(fakeV1Ctx());
+    const hooks = await mod.default.server(fakeV1Ctx());
     expect(hooks).toBeDefined();
     expect(hooks.tool?.agy).toBeDefined();
     expect(hooks.config).toBeDefined();

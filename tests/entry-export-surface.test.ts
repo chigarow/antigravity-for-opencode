@@ -27,8 +27,10 @@ describe("entry module export surface", () => {
     expect(Object.keys(entry).sort()).toEqual(["default"]);
   });
 
-  test("default export keeps attached id/server/setup for programmatic consumers", () => {
+  test("default export is a plain object with id/server/setup for both host loaders", () => {
     const plugin = entry.default;
+    expect(typeof plugin).toBe("object");
+    expect(typeof plugin).not.toBe("function");
     expect(plugin.id).toBe("opencode-agy");
     expect(typeof plugin.server).toBe("function");
     expect(typeof plugin.setup).toBe("function");
