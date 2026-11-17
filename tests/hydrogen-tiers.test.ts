@@ -88,7 +88,7 @@ describe("Hydrogen tier RED contracts", () => {
 
   test("v1 schema accepts exactly the sixteen versioned tiers", async () => {
     const { default: plugin } = await import("../src/index.ts");
-    const hooks = await plugin(fakeContext());
+    const hooks = await plugin.server(fakeContext());
     const schema = hooks.tool?.agy?.args.tier;
     expect(schema).toBeDefined();
     const unwrapped = schema instanceof z.ZodOptional ? schema.unwrap() : schema;

@@ -246,6 +246,16 @@ async function registerAgySkill(ctx: any): Promise<void> {
   }
 }
 
+/**
+ * OpenCode 2.x command invocation payload.
+ * @see https://opencode.ai/docs/build/plugins
+ */
+interface AgyCommandInvocation {
+  sessionID: string;
+  prompt?: { text?: string; [key: string]: unknown };
+  delivery?: "steer" | "queue";
+}
+
 export async function setupV2Plugin(ctx: any): Promise<void> {
   if (!ctx || typeof ctx !== "object") return;
 
@@ -294,7 +304,25 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
       upsertRegistryEntry(editor, "agy", {
         name: "agy",
         description: cmd.description,
-        template: cmd.template,
+        // OpenCode 2.x commands are executable definitions, not markdown
+        // templates. Render the embedded template the same way the v1
+        // command did: substitute $ARGUMENTS, then send it to the session.
+        // A function replacer keeps `$&`, `$'`, and `$$` in the user's text
+        // verbatim; a string replacer would expand those sequences.
+        execute: async (input: AgyCommandInvocation) => {
+          if (typeof ctx.session?.prompt !== "function") {
+            throw new Error(
+              "opencode-agy: ctx.session.prompt is unavailable; cannot execute /agy",
+            );
+          }
+          const text = cmd.template.replaceAll("$ARGUMENTS", () => input.prompt?.text ?? "");
+          return ctx.session.prompt({
+            ...input.prompt,
+            sessionID: input.sessionID,
+            text,
+            delivery: input.delivery,
+          });
+        },
       }, defined);
     });
   }

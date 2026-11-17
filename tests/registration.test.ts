@@ -15,7 +15,7 @@ import { AGY_V2_TOOL_SCHEMA, setupV2Plugin } from "../src/agy-v2";
 import { isCommandDef } from "../src/agy-command";
 
 async function v1ConfigHook(): Promise<(cfg: any) => Promise<void>> {
-  const hooks: any = await (AgyPlugin as any)({});
+  const hooks: any = await AgyPlugin.server({});
   const hook = hooks.config;
   if (typeof hook !== "function") throw new Error("AgyPlugin must expose a config hook");
   return hook;
@@ -242,7 +242,8 @@ describe("setupV2Plugin registers exactly one agy entry per name", () => {
       const agy = agyEntries(shape, editor);
       expect(agy).toHaveLength(1);
       expect(agy[0]?.name).toBe("agy");
-      expect(isCommandDef(agy[0])).toBe(true);
+      expect(typeof agy[0]?.execute).toBe("function");
+      expect(agy[0]?.template).toBeUndefined();
 
       if (shape === "map") {
         expect(editor.size).toBe(2);
@@ -282,8 +283,10 @@ describe("entry module is plugin-loader safe", () => {
     expect("AGY_V2_TOOL_SCHEMA" in mod).toBe(false);
   });
 
-  test("default export keeps attached id/server/setup for programmatic consumers", async () => {
+  test("default export is a plain object with id/server/setup for programmatic consumers", async () => {
     const plugin = (await import("../src/index")).default;
+    expect(typeof plugin).toBe("object");
+    expect(typeof plugin).not.toBe("function");
     expect(plugin.id).toBe("opencode-agy");
     expect(typeof plugin.server).toBe("function");
     expect(typeof plugin.setup).toBe("function");
