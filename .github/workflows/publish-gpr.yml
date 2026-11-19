@@ -1,0 +1,39 @@
+# Publishes a scoped mirror of this package to GitHub Packages (npm.pkg.github.com).
+# The unscoped `opencode-agy` on npmjs.com is unaffected; installs of the mirror:
+#   npm install @chigarow/opencode-agy --registry=https://npm.pkg.github.com
+# ponytail: publishes package.json version as-is (no tag/version cross-check);
+# add a tag-vs-version assert if the mirror ever drifts from releases.
+name: Publish GHPR mirror
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-gpr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+
+      # prepublishOnly (typecheck + test + build) runs via npm publish
+      - run: bun install --frozen-lockfile
+
+      # GitHub Packages npm registry only accepts scoped names; the scope
+      # must match this repo owner. Working-copy only - no committed rename.
+      - run: npm pkg set name=@chigarow/opencode-agy
+
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

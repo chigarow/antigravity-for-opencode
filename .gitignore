@@ -78,3 +78,7 @@ config/gcloud/
 **/.google/
 
 .cortexkit/*
+
+# Local scratch (drafts, generated artifacts)
+temp/
+skills/*.zip
