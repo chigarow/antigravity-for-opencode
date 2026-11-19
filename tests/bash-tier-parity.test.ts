@@ -23,10 +23,15 @@ const EXPECTED_TIERS = [
   { slug: "argon-4-hi", display: "Gemini 4 Argon (High)" },
   { slug: "argon-4-med", display: "Gemini 4 Argon (Medium)" },
   { slug: "argon-4-lo", display: "Gemini 4 Argon (Low)" },
+  { slug: "neon-4-hi", display: "Gemini 4 Neon (High)" },
+  { slug: "neon-4-med", display: "Gemini 4 Neon (Medium)" },
+  { slug: "neon-4-lo", display: "Gemini 4 Neon (Low)" },
+  { slug: "neon-4-xhigh", display: "Gemini 4 Neon (XHigh)" },
   { slug: "hydrogen-4-hi", display: "Gemini 4 Hydrogen (High)" },
   { slug: "hydrogen-4-med", display: "Gemini 4 Hydrogen (Medium)" },
   { slug: "hydrogen-4-lo", display: "Gemini 4 Hydrogen (Low)" },
   { slug: "hydrogen-4-xhigh", display: "Gemini 4 Hydrogen (XHigh)" },
+  { slug: "gpt-oss-120b-med", display: "GPT-OSS 120B (Medium)" },
 ];
 
 /** Case arm whose sole pattern is exactly `slug)` (no compound patterns). */
@@ -60,10 +65,10 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     }
   });
 
-  test.each(EXPECTED_TIERS.filter(({ slug }) => slug.startsWith("hydrogen-4-")))(
+  test.each(EXPECTED_TIERS.filter(({ slug }) => /^(?:hydrogen-4-|neon-4-|gpt-oss-120b-)/.test(slug)))(
     "$slug passes its exact display label to agy",
     async ({ slug, display }) => {
-      const tmp = mkdtempSync(join(tmpdir(), "agy-bash-hydrogen-"));
+      const tmp = mkdtempSync(join(tmpdir(), "agy-bash-tier-"));
       const captureFile = join(tmp, "args.txt");
       const fakeAgy = join(tmp, "agy");
       writeFileSync(fakeAgy, `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${captureFile}"\necho fake\n`);
@@ -81,17 +86,17 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     },
   );
 
-  test("usage help lists the sixteen versioned tiers", () => {
+  test("usage help lists the twenty-one versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all sixteen tier slugs
+    // When / Then: help documents all twenty-one tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
     // Tier option line lists the new surface in canonical groups
     expect(source).toMatch(
-      /--tier\s+<[^>]*flash-3\.8-hi[^>]*flash-3\.8-med[^>]*flash-3\.8-lo[^>]*claude-sonnet-5-5[^>]*claude-opus-5-5[^>]*argon-4[^>]*>/,
+      /--tier\s+<[^>]*flash-3\.8-hi[^>]*flash-3\.8-med[^>]*flash-3\.8-lo[^>]*claude-sonnet-5-5[^>]*claude-opus-5-5[^>]*argon-4[^>]*neon-4[^>]*hydrogen-4[^>]*gpt-oss-120b-med[^>]*>/,
     );
     // --timeout help documents the uniform 15m default
     expect(source).toMatch(/--timeout.*default 15m for all tiers/);
@@ -199,7 +204,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(stderr).toBe("");
   });
 
-  test("usage help tier list is exactly the sixteen v0.11.0 tiers", () => {
+  test("usage help tier list is exactly the twenty-one v0.16.0 tiers", () => {
     // Given: usage() --tier option line
     const source = readScript();
     const m = source.match(/--tier\s+<([^>]+)>/);

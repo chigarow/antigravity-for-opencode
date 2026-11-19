@@ -55,6 +55,26 @@ describe("real agy integration (headless)", () => {
     }
   }, 30000);
 
+  test.skipIf(!integrationEnabled)("neon-4-med tier returns output or times out gracefully", async () => {
+    try {
+      const result = await runAgy({
+        prompt: "Reply with exactly the word: NEON_OK and nothing else.",
+        tier: "neon-4-med",
+        timeout: "25s",
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.toUpperCase()).toContain("NEON_OK");
+    } catch (e: unknown) {
+      // Neon may be unavailable during paid-plan gating and rollout.
+      if (e instanceof AgyError && (e.code === "TIMEOUT" || e.code === "QUOTA_EXHAUSTED" || e.code === "MODEL_NOT_FOUND")) {
+        console.log("[integration] agy slow or limited, got expected error:", e.code);
+        return;
+      }
+      throw e;
+    }
+  }, 30000);
+
   test.skipIf(!integrationEnabled)("flash-3.8-med tier (new default model) returns output or times out gracefully", async () => {
     try {
       const result = await runAgy({

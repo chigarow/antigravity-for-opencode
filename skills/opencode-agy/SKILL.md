@@ -1,6 +1,6 @@
 ---
 name: opencode-agy
-description: Driving the `agy` tool from the opencode-agy plugin, which runs the Antigravity CLI (Gemini / Claude / Argon / Hydrogen) as a headless sub-agent. Use this whenever you hand scoped work to agy, pick an agy model tier, decide whether a task is worth delegating, resume a run that hit `AGY_ERROR [TIMEOUT]`, analyze a local PDF or image with agy, or explain an `AGY_ERROR [CODE]` result. Trigger it on "delegate to agy", "use gemini/antigravity", "/agy", or any plan to offload bulk or cross-model work, even when the plugin is never named.
+description: Driving the `agy` tool from the opencode-agy plugin, which runs the Antigravity CLI (Gemini / Claude / Argon / Neon / Hydrogen / GPT-OSS) as a headless sub-agent. Use this whenever you hand scoped work to agy, pick an agy model tier, decide whether a task is worth delegating, resume a run that hit `AGY_ERROR [TIMEOUT]`, analyze a local PDF or image with agy, or explain an `AGY_ERROR [CODE]` result. Trigger it on "delegate to agy", "use gemini/antigravity", "/agy", or any plan to offload bulk or cross-model work, even when the plugin is never named.
 ---
 
 # opencode-agy
@@ -46,7 +46,7 @@ Output caps: stdout is cut at 100,000 bytes, and stderr is shown at 2,000 chars 
 
 ## Pick the tier
 
-Sixteen tier names across five model families. `hi` / `med` / `lo` select the High / Medium / Low variant; `hydrogen-4-xhigh` selects the extra XHigh level. Pass tier names only: a CLI slug such as `gemini-3.8-flash-high` as `tier` returns `INVALID_TIER`.
+Twenty-one tier names across seven model families. `hi` / `med` / `lo` select the High / Medium / Low variant; `hydrogen-4-xhigh` and `neon-4-xhigh` select the extra XHigh level (`gpt-oss-120b-med` ships only Medium). Pass tier names only: a CLI slug such as `gemini-4-neon-xhigh` as `tier` returns `INVALID_TIER`.
 
 | Tier | Use for |
 | --- | --- |
@@ -56,7 +56,9 @@ Sixteen tier names across five model families. `hi` / `med` / `lo` select the Hi
 | `claude-sonnet-5-5-{hi,med,lo}` | Code correctness, reviews, careful multi-file edits. Needs a Pro or Ultra plan. |
 | `claude-opus-5-5-{hi,med,lo}` | Hardest merges, gnarly refactors, second opinion on a risky diff. Needs a Pro or Ultra plan. |
 | `argon-4-{hi,med,lo}` | Needs a **paid** Pro or Ultra plan. Trial, student, and partner-bundled plans do not get it. Run `agy models` to check entitlement. |
+| `neon-4-{hi,med,lo,xhigh}` | Frontier reasoning with four effort levels. Needs a **paid** Pro or Ultra plan, a Pro trial with an eligible premium device, or Gemini Enterprise. Free/Plus excluded; run `agy models` to check entitlement. |
 | `hydrogen-4-{hi,med,lo,xhigh}` | Fast agentic workhorse with four effort levels. Availability depends on your plan/account — run `agy models`. |
+| `gpt-oss-120b-med` | Open lightweight model, single Medium level, runs on Free/Plus too. Upstream lists a Nov 18, 2026 removal date; availability may end without notice. |
 
 Dropped tiers: `flash-3.5-*`, `flash-3.6-*`, `flash-3.7-*`, and `pro-3.1-*` have no aliases and return `INVALID_TIER`, even when `model` is set.
 
@@ -89,7 +91,7 @@ agy-side failures come back as `AGY_ERROR [CODE]` with a message, a `details` ob
 | --- | --- |
 | `TIMEOUT` | Resume with `conversation` and `details.suggestedNextTimeout`, see the recipe above. |
 | `DIR_NOT_ALLOWED` | `dir` is empty, flag-like, non-existent, or outside the workspace root. Omitting `dir` defaults to the workspace root, so leave it out for project-wide work. Use a path inside the project. |
-| `INVALID_TIER` | Unknown tier, a CLI slug, or a dropped name. Pick from the sixteen above. |
+| `INVALID_TIER` | Unknown tier, a CLI slug, or a dropped name. Pick from the twenty-one above. |
 | `YOLO_NOT_APPROVED` | Add `sandbox: true` and ask the host for `AGY_ALLOW_YOLO=1`, or drop `yolo`. |
 | `INVALID_ARGUMENT` / `INVALID_ARGS` / `INVALID_CONVERSATION_ID` / `INVALID_TIMEOUT` | Argument shape is wrong: a wrong type, empty or flag-like value, malformed conversation ID, or bad timeout. `INVALID_ARGS` means `continue: true` came with `conversation`. Fix the argument; retrying unchanged repeats the error. |
 | `MODEL_NOT_FOUND` | Model unavailable in this environment (entitlement, rollout, or CLI support vary). Run `agy models`, then fall back to a `flash-3.8-*` tier. |

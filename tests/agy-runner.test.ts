@@ -56,7 +56,7 @@ describe("buildAgyArgs", () => {
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps all twelve versioned tiers correctly", () => {
+  test("maps all twenty-one versioned tiers correctly", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.8-hi" })).toContain(
       "Gemini 3.8 Flash (High)"
     );
@@ -92,6 +92,33 @@ describe("buildAgyArgs", () => {
     );
     expect(buildAgyArgs({ prompt: "x", tier: "argon-4-lo" })).toContain(
       "Gemini 4 Argon (Low)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "neon-4-hi" })).toContain(
+      "Gemini 4 Neon (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "neon-4-med" })).toContain(
+      "Gemini 4 Neon (Medium)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "neon-4-lo" })).toContain(
+      "Gemini 4 Neon (Low)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "neon-4-xhigh" })).toContain(
+      "Gemini 4 Neon (XHigh)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "hydrogen-4-hi" })).toContain(
+      "Gemini 4 Hydrogen (High)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "hydrogen-4-med" })).toContain(
+      "Gemini 4 Hydrogen (Medium)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "hydrogen-4-lo" })).toContain(
+      "Gemini 4 Hydrogen (Low)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "hydrogen-4-xhigh" })).toContain(
+      "Gemini 4 Hydrogen (XHigh)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "gpt-oss-120b-med" })).toContain(
+      "GPT-OSS 120B (Medium)"
     );
   });
 
@@ -431,6 +458,7 @@ describe("buildAgyArgs", () => {
     "flash-3.7-hi",
     "flash-3.7-med",
     "flash-3.7-lo",
+    "gemini-4-neon-xhigh",
     "gpt-oss-120b-medium",
   ])(
     "throws INVALID_TIER for removed tier name %s (no alias shims)",

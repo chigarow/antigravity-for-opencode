@@ -17,10 +17,15 @@ export type Tier =
   | "argon-4-hi"
   | "argon-4-med"
   | "argon-4-lo"
+  | "neon-4-hi"
+  | "neon-4-med"
+  | "neon-4-lo"
+  | "neon-4-xhigh"
   | "hydrogen-4-hi"
   | "hydrogen-4-med"
   | "hydrogen-4-lo"
-  | "hydrogen-4-xhigh";
+  | "hydrogen-4-xhigh"
+  | "gpt-oss-120b-med";
 
 /**
  * Host-owned authority policy. Everything here comes from the plugin
@@ -91,10 +96,15 @@ const TIER_MODEL: Record<Tier, string> = {
   "argon-4-hi": "Gemini 4 Argon (High)",
   "argon-4-med": "Gemini 4 Argon (Medium)",
   "argon-4-lo": "Gemini 4 Argon (Low)",
+  "neon-4-hi": "Gemini 4 Neon (High)",
+  "neon-4-med": "Gemini 4 Neon (Medium)",
+  "neon-4-lo": "Gemini 4 Neon (Low)",
+  "neon-4-xhigh": "Gemini 4 Neon (XHigh)",
   "hydrogen-4-hi": "Gemini 4 Hydrogen (High)",
   "hydrogen-4-med": "Gemini 4 Hydrogen (Medium)",
   "hydrogen-4-lo": "Gemini 4 Hydrogen (Low)",
   "hydrogen-4-xhigh": "Gemini 4 Hydrogen (XHigh)",
+  "gpt-oss-120b-med": "GPT-OSS 120B (Medium)",
 };
 
 /** Environment variables the delegated child is allowed to inherit. */

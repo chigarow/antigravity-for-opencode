@@ -7,12 +7,18 @@ import { z } from "zod";
 import { AgyError, buildAgyArgs, runAgy, type SpawnFn, type Tier } from "../src/agy-runner";
 import { AGY_V2_TOOL_SCHEMA } from "../src/agy-v2";
 
-// Label expectations follow the requested RED contract; mapping finalization is probe-gated.
-const HYDROGEN = [
+// Label expectations follow the plan's RED contract; mappings finalized against agy 1.5.12 probes (Nov 19, 2026).
+const NEW_TIERS = [
+  ["neon-4-hi", "Gemini 4 Neon (High)"],
+  ["neon-4-med", "Gemini 4 Neon (Medium)"],
+  ["neon-4-lo", "Gemini 4 Neon (Low)"],
+  ["neon-4-xhigh", "Gemini 4 Neon (XHigh)"],
+
   ["hydrogen-4-hi", "Gemini 4 Hydrogen (High)"],
   ["hydrogen-4-med", "Gemini 4 Hydrogen (Medium)"],
   ["hydrogen-4-lo", "Gemini 4 Hydrogen (Low)"],
   ["hydrogen-4-xhigh", "Gemini 4 Hydrogen (XHigh)"],
+  ["gpt-oss-120b-med", "GPT-OSS 120B (Medium)"],
 ] as const;
 
 const EXPECTED_TIERS = [
@@ -20,7 +26,7 @@ const EXPECTED_TIERS = [
   "claude-sonnet-5-5-hi", "claude-sonnet-5-5-med", "claude-sonnet-5-5-lo",
   "claude-opus-5-5-hi", "claude-opus-5-5-med", "claude-opus-5-5-lo",
   "argon-4-hi", "argon-4-med", "argon-4-lo",
-  ...HYDROGEN.map(([tier]) => tier),
+  ...NEW_TIERS.map(([tier]) => tier),
 ];
 
 function fakeContext(): PluginInput {
@@ -72,8 +78,8 @@ function expectNeutral(error: AgyError) {
   expect(error.message).not.toMatch(/account|Pro\/Ultra|trial/i);
 }
 
-describe("Hydrogen tier RED contracts", () => {
-  test.each(HYDROGEN)("Tier union includes %s", (tier) => {
+describe("Versioned tier contracts", () => {
+  test.each(NEW_TIERS)("Tier union includes %s", (tier) => {
     const source = readFileSync(new URL("../src/agy-runner.ts", import.meta.url), "utf8");
     const union = source.match(/export type Tier\s*=([\s\S]*?);/)?.[1];
     expect(union).toBeDefined();
@@ -81,12 +87,12 @@ describe("Hydrogen tier RED contracts", () => {
   });
 
   // TIER_MODEL is private: exercise its public argument-building consumer.
-  test.each(HYDROGEN)("TIER_MODEL maps %s to %s", (tier, model) => {
+  test.each(NEW_TIERS)("TIER_MODEL maps %s to %s", (tier, model) => {
     const args = buildAgyArgs({ prompt: "x", tier: tier as Tier });
     expect(args[args.indexOf("--model") + 1]).toBe(model);
   });
 
-  test("v1 schema accepts exactly the sixteen versioned tiers", async () => {
+  test("v1 schema accepts exactly the twenty-one versioned tiers", async () => {
     const { default: plugin } = await import("../src/index.ts");
     const hooks = await plugin(fakeContext());
     const schema = hooks.tool?.agy?.args.tier;
@@ -96,7 +102,7 @@ describe("Hydrogen tier RED contracts", () => {
     expect(new Set((unwrapped as z.ZodEnum<any>).options)).toEqual(new Set(EXPECTED_TIERS));
   });
 
-  test("v2 schema accepts exactly the sixteen versioned tiers", () => {
+  test("v2 schema accepts exactly the twenty-one versioned tiers", () => {
     expect(new Set(AGY_V2_TOOL_SCHEMA.properties.tier.enum)).toEqual(new Set(EXPECTED_TIERS));
   });
 

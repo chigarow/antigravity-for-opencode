@@ -17,10 +17,15 @@ const LOCKED_TIERS = [
   "argon-4-hi",
   "argon-4-med",
   "argon-4-lo",
+  "neon-4-hi",
+  "neon-4-med",
+  "neon-4-lo",
+  "neon-4-xhigh",
   "hydrogen-4-hi",
   "hydrogen-4-med",
   "hydrogen-4-lo",
   "hydrogen-4-xhigh",
+  "gpt-oss-120b-med",
 ] as const;
 
 const REMOVED_TIERS = [
@@ -183,7 +188,7 @@ describe("agy tool tier schema contracts (v0.8.0)", () => {
     return unwrapped.options;
   }
 
-  test("schema accepts exactly the sixteen versioned tiers", async () => {
+  test("schema accepts exactly the twenty-one versioned tiers", async () => {
     // Given: real tool schema from plugin registration
     const schema = await tierSchema();
     const values = new Set(enumValues(schema));
