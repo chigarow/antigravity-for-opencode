@@ -19,6 +19,8 @@ const NEW_TIERS = [
   ["hydrogen-4-lo", "Gemini 4 Hydrogen (Low)"],
   ["hydrogen-4-xhigh", "Gemini 4 Hydrogen (XHigh)"],
   ["gpt-oss-120b-med", "GPT-OSS 120B (Medium)"],
+  ["orchestrator-argon", "Orchestrator (Argon)"],
+  ["orchestrator-neon", "Orchestrator (Neon)"],
 ] as const;
 
 const EXPECTED_TIERS = [
@@ -92,9 +94,9 @@ describe("Versioned tier contracts", () => {
     expect(args[args.indexOf("--model") + 1]).toBe(model);
   });
 
-  test("v1 schema accepts exactly the twenty-one versioned tiers", async () => {
+  test("v1 schema accepts exactly the twenty-three versioned tiers", async () => {
     const { default: plugin } = await import("../src/index.ts");
-    const hooks = await plugin(fakeContext());
+    const hooks = await plugin.server(fakeContext());
     const schema = hooks.tool?.agy?.args.tier;
     expect(schema).toBeDefined();
     const unwrapped = schema instanceof z.ZodOptional ? schema.unwrap() : schema;
@@ -102,7 +104,7 @@ describe("Versioned tier contracts", () => {
     expect(new Set((unwrapped as z.ZodEnum<any>).options)).toEqual(new Set(EXPECTED_TIERS));
   });
 
-  test("v2 schema accepts exactly the twenty-one versioned tiers", () => {
+  test("v2 schema accepts exactly the twenty-three versioned tiers", () => {
     expect(new Set(AGY_V2_TOOL_SCHEMA.properties.tier.enum)).toEqual(new Set(EXPECTED_TIERS));
   });
 

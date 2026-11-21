@@ -56,7 +56,7 @@ describe("buildAgyArgs", () => {
     expect(args[args.length - 1]).toBe("do something");
   });
 
-  test("maps all twenty-one versioned tiers correctly", () => {
+  test("maps all twenty-three versioned tiers correctly", () => {
     expect(buildAgyArgs({ prompt: "x", tier: "flash-3.8-hi" })).toContain(
       "Gemini 3.8 Flash (High)"
     );
@@ -119,6 +119,12 @@ describe("buildAgyArgs", () => {
     );
     expect(buildAgyArgs({ prompt: "x", tier: "gpt-oss-120b-med" })).toContain(
       "GPT-OSS 120B (Medium)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "orchestrator-argon" })).toContain(
+      "Orchestrator (Argon)"
+    );
+    expect(buildAgyArgs({ prompt: "x", tier: "orchestrator-neon" })).toContain(
+      "Orchestrator (Neon)"
     );
   });
 

@@ -3,6 +3,10 @@ import { mkdtemp, chmod, rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "os";
 import path from "node:path";
+import { autoTier } from "./agy-route";
+import { slimPrompt, resolveWorkspaceFile } from "./agy-prompt";
+import { ensureAgyOverlay, overlayChildEnv } from "./agy-overlay";
+import { isAcpEnabled } from "./agy-flags";
 
 export type Tier =
   | "flash-3.8-hi"
@@ -25,7 +29,9 @@ export type Tier =
   | "hydrogen-4-med"
   | "hydrogen-4-lo"
   | "hydrogen-4-xhigh"
-  | "gpt-oss-120b-med";
+  | "gpt-oss-120b-med"
+  | "orchestrator-argon"
+  | "orchestrator-neon";
 
 /**
  * Host-owned authority policy. Everything here comes from the plugin
@@ -51,6 +57,8 @@ export interface AgyOptions {
   continue?: boolean;
   conversation?: string;
   model?: string; // exact model name override (future-proof)
+  /** Workspace-relative or absolute files to attach. Only these (plus paths mentioned in the prompt that exist in the workspace) are sent. */
+  files?: string[];
   signal?: AbortSignal;
   /** Overrides for the host policy; omitted fields fall back to env/cwd. */
   policy?: Partial<AgyPolicy>;
@@ -70,6 +78,10 @@ export interface AgyResult {
    * TIMEOUT / EMPTY / AGY_FAILED.
    */
   conversationId?: string;
+  /** How the call ran. `acp` is the persistent process; `print` is the one-shot fallback. */
+  transport?: "acp" | "print";
+  /** Tier actually used, when one was selected or auto-routed. */
+  tier?: Tier;
 }
 
 export class AgyError extends Error {
@@ -105,6 +117,8 @@ const TIER_MODEL: Record<Tier, string> = {
   "hydrogen-4-lo": "Gemini 4 Hydrogen (Low)",
   "hydrogen-4-xhigh": "Gemini 4 Hydrogen (XHigh)",
   "gpt-oss-120b-med": "GPT-OSS 120B (Medium)",
+  "orchestrator-argon": "Orchestrator (Argon)",
+  "orchestrator-neon": "Orchestrator (Neon)",
 };
 
 /** Environment variables the delegated child is allowed to inherit. */
@@ -134,6 +148,8 @@ const CHILD_ENV_ALLOWLIST = [
   "HTTP_PROXY",
   "HTTPS_PROXY",
   "NO_PROXY",
+  "GEMINI_DIR",
+  "ANTIGRAVITY_GEMINI_DIR",
 ] as const;
 
 /**
@@ -308,7 +324,7 @@ function formatMsToDuration(ms: number): string {
  * Parse a normalized timeout string (output of normalizeTimeout) into milliseconds.
  * Accepts: "10m", "300s", "900000" (digit-only ms), or a number.
  */
-function parseTimeoutMs(timeout: string | number): number {
+export function parseTimeoutMs(timeout: string | number): number {
   if (typeof timeout === "number") return timeout;
   const s = String(timeout).trim();
   const m = s.match(/^(\d+)\s*(h|m|s|ms)$/);
@@ -416,8 +432,17 @@ function assertNotFlagLike(name: string, value: string | undefined): void {
 }
 
 /** The model name the caller's tier (or explicit override) resolves to. */
-function modelUsed(opts: AgyOptions): string {
-  return opts.model ?? TIER_MODEL[opts.tier ?? "flash-3.8-med"];
+export function modelUsed(opts: AgyOptions): string {
+  if (opts.model) return opts.model;
+  const tier = opts.tier ?? autoTier(opts.prompt, opts.files);
+  return TIER_MODEL[tier];
+}
+
+/** The tier that will actually be used. Explicit tier/model win. */
+export function resolvedTier(opts: AgyOptions): Tier | undefined {
+  if (opts.tier) return opts.tier;
+  if (opts.model) return undefined;
+  return autoTier(opts.prompt, opts.files);
 }
 
 interface PreparedAgy {
@@ -584,13 +609,70 @@ function truncateForDisplay(text: string, maxChars: number): string {
   return `${text.slice(0, maxChars)}\n... [truncated ${text.length - maxChars} chars]`;
 }
 
+
+function confineFiles(files: string[] | undefined, policy: AgyPolicy): string[] | undefined {
+  if (!files || files.length === 0) return files;
+  const out: string[] = [];
+  for (const raw of files) {
+    if (typeof raw !== "string" || raw.length === 0) {
+      throw new AgyError("files entries must be non-empty strings", "DIR_NOT_ALLOWED", { file: raw });
+    }
+    const resolved = resolveWorkspaceFile(raw, policy.workspaceRoot);
+    if (!resolved) {
+      throw new AgyError(
+        `file is outside the approved workspace or does not exist: ${raw}`,
+        "DIR_NOT_ALLOWED",
+        { file: raw, workspaceRoot: policy.workspaceRoot }
+      );
+    }
+    out.push(resolved);
+  }
+  return out;
+}
+
 export async function runAgy(
   opts: AgyOptions,
   spawnFn: SpawnFn = spawn
 ): Promise<AgyResult> {
   const prepared = prepareAgy(opts);
+  const slimmed = slimPrompt({
+    prompt: opts.prompt,
+    files: confineFiles(opts.files, prepared.policy),
+    workspaceRoot: prepared.policy.workspaceRoot,
+    mentionRoot: prepared.cwd,
+  });
   const args = prepared.args;
+  const pIndex = args.lastIndexOf("-p");
+  if (pIndex >= 0) args[pIndex + 1] = slimmed;
   const start = Date.now();
+
+  // Custom spawnFn (unit tests) stays on the --print path. Tests that
+  // opt into ACP set OPENCODE_AGY_ACP=1 so they can still inject a print fallback.
+  const canAcp =
+    isAcpEnabled() &&
+    opts.continue !== true &&
+    opts.conversation === undefined &&
+    opts.sandbox !== true &&
+    !opts.project &&
+    (spawnFn === spawn || process.env.OPENCODE_AGY_ACP === "1");
+
+  if (canAcp) {
+    const { isFallbackWorthy, runAgyViaAcp } = await import("./agy-acp");
+    try {
+      const result = await runAgyViaAcp({
+        cwd: prepared.cwd,
+        prompt: slimmed,
+        tier: resolvedTier(opts) ?? opts.tier,
+        model: opts.model,
+        signal: opts.signal,
+        timeoutMs: parseTimeoutMs(prepared.timeout),
+      });
+      return result;
+    } catch (err) {
+      if (!isFallbackWorthy(err)) throw err;
+      // Start failed or the process was not ready: one --print attempt, no loop.
+    }
+  }
   const requestedConvId = opts.conversation;
 
   // Always tee agy's log to a unique temp file inside a fresh per-run 0700
@@ -611,7 +693,7 @@ export async function runAgy(
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
-        env: buildChildEnv(),
+        env: overlayChildEnv(ensureAgyOverlay(), buildChildEnv()),
         cwd: prepared.cwd,
       });
     } catch (err: any) {
@@ -739,6 +821,8 @@ export async function runAgy(
       stderr: scrubSecrets(stderrText),
       exitCode: exit,
       durationMs,
+      transport: "print",
+      tier: resolvedTier(opts),
     };
     if (convId) result.conversationId = convId;
     return result;
@@ -778,6 +862,10 @@ async function readConvIdFromLog(logFile: string): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+export function classifyAgyError(stderr: string, exitCode: number): AgyError | null {
+  return classifyError(stderr, exitCode);
 }
 
 function classifyError(stderr: string, exitCode: number): AgyError | null {

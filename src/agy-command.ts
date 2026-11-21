@@ -11,6 +11,7 @@
 
 import agyCommandMarkdown from "../commands/agy.md";
 import type { AgyResult, Tier } from "./agy-runner";
+import { resolvedTier } from "./agy-runner";
 
 /** Parsed result of {@link parseAgyCommand}. */
 export interface ParsedCommand {
@@ -243,6 +244,7 @@ export interface AgyToolArgs {
   continue?: boolean;
   conversation?: string;
   model?: string;
+  files?: string[];
 }
 
 /**
@@ -265,9 +267,19 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefi
       metadata: { error: true, unexpected: true, code: "UNDEFINED_RESULT" },
     };
   }
+  const usedTier =
+    result.tier ??
+    args.tier ??
+    resolvedTier({
+      prompt: args.prompt,
+      tier: args.tier,
+      model: args.model,
+      files: args.files,
+    }) ??
+    "flash-3.8-med";
   const header = [
     `## agy result`,
-    `tier: ${args.tier ?? "flash-3.8-med"}`,
+    `tier: ${usedTier}`,
     `duration: ${result.durationMs}ms`,
     `exit: ${result.exitCode}`,
     args.sandbox ? `sandbox: true` : "",
@@ -279,16 +291,17 @@ export function buildAgyToolResult(args: AgyToolArgs, result: AgyResult | undefi
   ].filter(Boolean).join("\n");
 
   return {
-    title: `agy (${args.tier ?? "flash-3.8-med"})`,
+    title: `agy (${usedTier})`,
     output: header + "\n" + result.stdout,
     metadata: {
-      tier: args.tier ?? "flash-3.8-med",
+      tier: usedTier,
       durationMs: result.durationMs,
       exitCode: result.exitCode,
       tool: "agy",
       sandbox: !!args.sandbox,
       yolo: !!args.yolo,
       resumed: !!(args.continue || args.conversation),
+      ...(result.transport ? { transport: result.transport } : {}),
       ...(result.conversationId ? { conversationId: result.conversationId } : {}),
     },
   };

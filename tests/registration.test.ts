@@ -15,7 +15,7 @@ import { AGY_V2_TOOL_SCHEMA, setupV2Plugin } from "../src/agy-v2";
 import { isCommandDef } from "../src/agy-command";
 
 async function v1ConfigHook(): Promise<(cfg: any) => Promise<void>> {
-  const hooks: any = await (AgyPlugin as any)({});
+  const hooks: any = await (AgyPlugin as any).server({});
   const hook = hooks.config;
   if (typeof hook !== "function") throw new Error("AgyPlugin must expose a config hook");
   return hook;
@@ -56,6 +56,7 @@ describe("AGY_V2_TOOL_SCHEMA descriptions mirror the v1 policy", () => {
       "continue",
       "conversation",
       "dir",
+      "files",
       "model",
       "project",
       "prompt",
