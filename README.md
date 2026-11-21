@@ -20,7 +20,7 @@ A thin, non-intrusive OpenCode plugin that spawns the official `agy` CLI as a sa
 ## Features
 
 - 🤖 **One tool, one command** — minimal surface: a single `agy` tool, a single `/agy` slash command, one config hook
-- 🧠 **21 model tiers**: Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 4 Argon, Gemini 4 Neon, Gemini 4 Hydrogen, and GPT-OSS 120B, with low / medium / high effort (Hydrogen and Neon also offer xhigh; GPT-OSS is Medium only)
+- 🧠 **23 model tiers**: Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, Gemini 4 Argon, Gemini 4 Neon, Gemini 4 Hydrogen, GPT-OSS 120B, and Orchestrator, with low / medium / high effort (Hydrogen and Neon also offer xhigh; GPT-OSS and Orchestrator are Medium-only display names with no extra effort flags)
 - 🔁 **Resumable** — resume any agy conversation by ID or with `continue`, so long tasks survive timeouts
 - 🛡️ **Failures are data** — timeouts, quota, auth errors, and crashes are returned as structured text; the host agent never crashes
 - 🔌 **OpenCode 1.x & 2.x** — dual-export plugin with automatic host detection, plus subprocess cancellation on abort (2.x)
@@ -170,7 +170,7 @@ Invoke agy directly from the OpenCode TUI:
 
 ### Agent skill
 
-The skill `opencode-agy` teaches the coding agent when delegating to `agy` is worth it, how to pick one of the twenty-one tiers, how to resume a `TIMEOUT` with `conversation`, the local-file recipe, and the full `AGY_ERROR [CODE]` map. Its source of truth is `skills/opencode-agy/SKILL.md` in the repo; the same file ships in the npm package.
+The skill `opencode-agy` teaches the coding agent when delegating to `agy` is worth it, how to pick one of the twenty-three tiers, how to resume a `TIMEOUT` with `conversation`, the local-file recipe, and the full `AGY_ERROR [CODE]` map. Its source of truth is `skills/opencode-agy/SKILL.md` in the repo; the same file ships in the npm package.
 
 - **OpenCode 2.x:** automatic. Install the plugin and restart OpenCode, and the plugin registers the skill at startup. No extra command, no files written, nothing to clean up on uninstall. Updating the plugin updates the skill; removing the plugin removes it.
 - **OpenCode 1.x:** tool only. OpenCode 1.x has no skill API, so the skill is never registered. Copy it by hand:
@@ -185,7 +185,7 @@ npx skills add chigarow/antigravity-for-opencode --skill opencode-agy -a opencod
 
 ## Model tiers
 
-Twenty-one tiers across seven models. The `hi` / `med` / `lo` suffix selects the model's reasoning effort; `hydrogen-4-xhigh` and `neon-4-xhigh` pick the extra XHigh level (GPT-OSS ships a single Medium level). All tiers default to a 15-minute timeout (see [`timeout`](#arguments)).
+Twenty-three tiers across eight models. The `hi` / `med` / `lo` suffix selects the model's reasoning effort; `hydrogen-4-xhigh` and `neon-4-xhigh` pick the extra XHigh level (GPT-OSS and Orchestrator ship a single level). All tiers default to a 15-minute timeout (see [`timeout`](#arguments)).
 
 | Tiers | Model | Account |
 | --- | --- | --- |
@@ -196,6 +196,8 @@ Twenty-one tiers across seven models. The `hi` / `med` / `lo` suffix selects the
 | `neon-4-hi` / `neon-4-med` / `neon-4-lo` / `neon-4-xhigh` | Gemini 4 Neon | Paid Pro & Ultra† |
 | `hydrogen-4-hi` / `hydrogen-4-med` / `hydrogen-4-lo` / `hydrogen-4-xhigh` | Gemini 4 Hydrogen | Depends on plan — check `agy models` |
 | `gpt-oss-120b-med` | GPT-OSS 120B | Free, Plus, Pro & Ultra‡ |
+| `orchestrator-argon` | Orchestrator (Argon) | Run `agy models` |
+| `orchestrator-neon` | Orchestrator (Neon) | Run `agy models` |
 
 † Paid plans, Pro trials with an eligible premium device, and Gemini Enterprise (see the Neon note). ‡ Subject to the removal warning below.
 

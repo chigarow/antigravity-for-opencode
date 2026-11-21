@@ -32,6 +32,8 @@ const EXPECTED_TIERS = [
   { slug: "hydrogen-4-lo", display: "Gemini 4 Hydrogen (Low)" },
   { slug: "hydrogen-4-xhigh", display: "Gemini 4 Hydrogen (XHigh)" },
   { slug: "gpt-oss-120b-med", display: "GPT-OSS 120B (Medium)" },
+  { slug: "orchestrator-argon", display: "Orchestrator (Argon)" },
+  { slug: "orchestrator-neon", display: "Orchestrator (Neon)" },
 ];
 
 /** Case arm whose sole pattern is exactly `slug)` (no compound patterns). */
@@ -86,11 +88,11 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     },
   );
 
-  test("usage help lists the twenty-one versioned tiers", () => {
+  test("usage help lists the twenty-three versioned tiers", () => {
     // Given: usage() heredoc
     const source = readScript();
 
-    // When / Then: help documents all twenty-one tier slugs
+    // When / Then: help documents all twenty-three tier slugs
     for (const { slug } of EXPECTED_TIERS) {
       expect(source).toContain(slug);
     }
@@ -204,7 +206,7 @@ describe("bash tier parity (scripts/agy-delegate.sh)", () => {
     expect(stderr).toBe("");
   });
 
-  test("usage help tier list is exactly the twenty-one v0.16.0 tiers", () => {
+  test("usage help tier list is exactly the twenty-three versioned tiers", () => {
     // Given: usage() --tier option line
     const source = readScript();
     const m = source.match(/--tier\s+<([^>]+)>/);

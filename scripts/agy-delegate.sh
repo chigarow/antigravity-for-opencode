@@ -2,7 +2,7 @@
 #
 # agy-delegate.sh — standalone wrapper around the Antigravity CLI (`agy`).
 # Matches the behavior of the opencode-agy plugin, with the same review and safety caveats.
-# Supports 21 versioned tiers: flash-3.8-hi, flash-3.8-med, flash-3.8-lo, claude-sonnet-5-5-hi, claude-sonnet-5-5-med, claude-sonnet-5-5-lo, claude-opus-5-5-hi, claude-opus-5-5-med, claude-opus-5-5-lo, argon-4-hi, argon-4-med, argon-4-lo, neon-4-hi, neon-4-med, neon-4-lo, neon-4-xhigh, hydrogen-4-hi, hydrogen-4-med, hydrogen-4-lo, hydrogen-4-xhigh, and gpt-oss-120b-med (default: flash-3.8-med).
+# Supports 23 versioned tiers: flash-3.8-hi, flash-3.8-med, flash-3.8-lo, claude-sonnet-5-5-hi, claude-sonnet-5-5-med, claude-sonnet-5-5-lo, claude-opus-5-5-hi, claude-opus-5-5-med, claude-opus-5-5-lo, argon-4-hi, argon-4-med, argon-4-lo, neon-4-hi, neon-4-med, neon-4-lo, neon-4-xhigh, hydrogen-4-hi, hydrogen-4-med, hydrogen-4-lo, hydrogen-4-xhigh, gpt-oss-120b-med, orchestrator-argon, and orchestrator-neon (default: flash-3.8-med).
 # Timeout default is 15m for every tier; explicit values above 4h are clamped to 4h (enforced here, like the plugin).
 # Safety rules:
 #   - `--yolo` requires `--sandbox` AND host consent (`AGY_ALLOW_YOLO=1`).
@@ -77,7 +77,7 @@ Usage: agy-delegate.sh [options] "prompt"
        echo "prompt" | agy-delegate.sh -
 
 Options:
-  -t, --tier <flash-3.8-hi|flash-3.8-med|flash-3.8-lo|claude-sonnet-5-5-hi|claude-sonnet-5-5-med|claude-sonnet-5-5-lo|claude-opus-5-5-hi|claude-opus-5-5-med|claude-opus-5-5-lo|argon-4-hi|argon-4-med|argon-4-lo|neon-4-hi|neon-4-med|neon-4-lo|neon-4-xhigh|hydrogen-4-hi|hydrogen-4-med|hydrogen-4-lo|hydrogen-4-xhigh|gpt-oss-120b-med>
+  -t, --tier <flash-3.8-hi|flash-3.8-med|flash-3.8-lo|claude-sonnet-5-5-hi|claude-sonnet-5-5-med|claude-sonnet-5-5-lo|claude-opus-5-5-hi|claude-opus-5-5-med|claude-opus-5-5-lo|argon-4-hi|argon-4-med|argon-4-lo|neon-4-hi|neon-4-med|neon-4-lo|neon-4-xhigh|hydrogen-4-hi|hydrogen-4-med|hydrogen-4-lo|hydrogen-4-xhigh|gpt-oss-120b-med|orchestrator-argon|orchestrator-neon>
                                       Tier (default: flash-3.8-med)
   -d, --dir <path>                  Add workspace dir; must resolve (realpath) inside the
                                     workspace root (AGY_WORKSPACE_ROOT when set, else $PWD).
@@ -120,6 +120,8 @@ model_for_tier() {
     hydrogen-4-lo)  echo "Gemini 4 Hydrogen (Low)" ;;
     hydrogen-4-xhigh) echo "Gemini 4 Hydrogen (XHigh)" ;;
     gpt-oss-120b-med) echo "GPT-OSS 120B (Medium)" ;;
+    orchestrator-argon) echo "Orchestrator (Argon)" ;;
+    orchestrator-neon) echo "Orchestrator (Neon)" ;;
     *) die "unknown tier '$1'" ;;
   esac
 }

@@ -10,6 +10,8 @@ const expected = [
   ...["hydrogen-4"].flatMap((prefix) => ["hi", "med", "lo"].map((effort) => `${prefix}-${effort}`)),
   "hydrogen-4-xhigh",
   "gpt-oss-120b-med",
+  "orchestrator-argon",
+  "orchestrator-neon",
 ];
 const read = (file: string) => readFileSync(join(import.meta.dir, "..", file), "utf8");
 const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z`])/);
@@ -17,7 +19,7 @@ const sentences = (text: string) => text.split(/(?<=[.!?])\s+(?=[A-Z`])/);
 function slugs(text: string): Set<string> {
   const expanded = text.replace(/([a-z0-9.-]+)-\{([a-z,]+)\}/g,
     (_, prefix: string, suffixes: string) => suffixes.split(",").map((suffix) => `${prefix}-${suffix}`).join(" "));
-  return new Set(expanded.match(/(?:flash-3\.8|claude-(?:sonnet|opus)-5-5|argon-4|neon-4|hydrogen-4|gpt-oss-120b)-(?:xhigh|hi|med|lo)\b/g));
+  return new Set(expanded.match(/(?:(?:flash-3\.8|claude-(?:sonnet|opus)-5-5|argon-4|neon-4|hydrogen-4|gpt-oss-120b)-(?:xhigh|hi|med|lo)|orchestrator-(?:argon|neon))\b/g));
 }
 
 function neutral(span: string) {
@@ -26,19 +28,19 @@ function neutral(span: string) {
 
 describe("documentation tier parity", () => {
   for (const file of files) {
-    test(`${file} documents all twenty-one tiers and consistent counts`, () => {
+    test(`${file} documents all twenty-three tiers and consistent counts`, () => {
       const text = read(file);
       const found = slugs(text);
       for (const tier of expected) expect(found.has(tier)).toBe(true);
       expect(text).not.toMatch(/\btwelve\b/i);
       expect(text).not.toContain("12 model tiers");
       const countSpans = text.split("\n").flatMap(sentences)
-        .filter((span) => /\b(?:\d+|twenty-one|sixteen|twelve)\s+(?:(?:model|versioned)\s+)?tiers?\b/i.test(span));
+        .filter((span) => /\b(?:\d+|twenty-three|twenty-one|sixteen|twelve)\s+(?:(?:model|versioned)\s+)?tiers?\b/i.test(span));
       expect(countSpans.length).toBeGreaterThan(0);
       for (const span of countSpans) {
-        expect(span).toMatch(/\b(?:twenty-one|21)\s+(?:(?:model|versioned)\s+)?tiers?\b/i);
-        for (const count of span.matchAll(/\b(\d+|twenty-one|sixteen|twelve)\s+(?:(?:model|versioned)\s+)?tiers?\b/gi)) {
-          expect(["21", "twenty-one"]).toContain(count[1]!.toLowerCase());
+        expect(span).toMatch(/\b(?:twenty-three|23)\s+(?:(?:model|versioned)\s+)?tiers?\b/i);
+        for (const count of span.matchAll(/\b(\d+|twenty-three|twenty-one|sixteen|twelve)\s+(?:(?:model|versioned)\s+)?tiers?\b/gi)) {
+          expect(["23", "twenty-three"]).toContain(count[1]!.toLowerCase());
         }
       }
     });
@@ -58,10 +60,10 @@ describe("documentation tier parity", () => {
     });
   }
 
-  test("README features seven families, xhigh, and separate model notes", () => {
+  test("README features eight families, xhigh, and separate model notes", () => {
     const text = read("README.md");
     const feature = text.split("\n").find((line) => line.includes("model tiers"))!;
-    for (const family of ["Gemini 3.8 Flash", "Claude Sonnet 5.5", "Claude Opus 5.5", "Gemini 4 Argon", "Gemini 4 Neon", "Gemini 4 Hydrogen", "GPT-OSS 120B"]) expect(feature).toContain(family);
+    for (const family of ["Gemini 3.8 Flash", "Claude Sonnet 5.5", "Claude Opus 5.5", "Gemini 4 Argon", "Gemini 4 Neon", "Gemini 4 Hydrogen", "GPT-OSS 120B", "Orchestrator"]) expect(feature).toContain(family);
     expect(feature).toMatch(/xhigh/i);
     const notes = text.match(/^> \[!NOTE\]\n(?:>[^\n]*(?:\n|$))+/gm) ?? [];
     const hydrogenNote = notes.find((note) => /hydrogen/i.test(note));
@@ -81,7 +83,7 @@ describe("documentation tier parity", () => {
 
   test("skill frontmatter includes all families and MODEL_NOT_FOUND guidance is neutral", () => {
     const text = read("skills/opencode-agy/SKILL.md");
-    expect(text.split("---")[1]).toContain("(Gemini / Claude / Argon / Neon / Hydrogen / GPT-OSS)");
+    expect(text.split("---")[1]).toContain("(Gemini / Claude / Argon / Neon / Hydrogen / GPT-OSS / Orchestrator)");
     const row = text.split("\n").find((line) => line.startsWith("| `MODEL_NOT_FOUND`"))!;
     expect(row).toContain("agy models");
     expect(row).not.toContain("The plan lacks the model");

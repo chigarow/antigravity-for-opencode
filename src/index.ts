@@ -3,8 +3,9 @@ import { tool } from "@opencode-ai/plugin";
 import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets } from "./agy-runner";
 import { buildAgyToolResult, createAgyCommand, isCommandDef, upsertRegistryEntry } from "./agy-command";
 import { setupV2Plugin } from "./agy-v2";
+import { disposeAgyAcp, prewarmAgyAcp } from "./agy-acp";
 
-export interface UniversalAgyPlugin extends Plugin {
+export interface UniversalAgyPlugin {
   id: string;
   server: Plugin;
   setup: (ctx: any) => Promise<void> | void;
@@ -25,6 +26,11 @@ export interface UniversalAgyPlugin extends Plugin {
  * - Slash command is provided via commands/agy.md.
  */
 const v1Server: Plugin = async (ctx) => {
+  const workspaceRoot =
+    typeof (ctx as any)?.directory === "string" && (ctx as any).directory
+      ? (ctx as any).directory
+      : undefined;
+  prewarmAgyAcp({ cwd: workspaceRoot });
   return {
     tool: {
       agy: tool({
@@ -44,9 +50,9 @@ const v1Server: Plugin = async (ctx) => {
             .describe("The task to send to agy/Gemini. Be specific and scoped."),
 
           tier: tool.schema
-            .enum(["flash-3.8-hi", "flash-3.8-med", "flash-3.8-lo", "claude-sonnet-5-5-hi", "claude-sonnet-5-5-med", "claude-sonnet-5-5-lo", "claude-opus-5-5-hi", "claude-opus-5-5-med", "claude-opus-5-5-lo", "argon-4-hi", "argon-4-med", "argon-4-lo", "neon-4-hi", "neon-4-med", "neon-4-lo", "neon-4-xhigh", "hydrogen-4-hi", "hydrogen-4-med", "hydrogen-4-lo", "hydrogen-4-xhigh", "gpt-oss-120b-med"])
+            .enum(["flash-3.8-hi", "flash-3.8-med", "flash-3.8-lo", "claude-sonnet-5-5-hi", "claude-sonnet-5-5-med", "claude-sonnet-5-5-lo", "claude-opus-5-5-hi", "claude-opus-5-5-med", "claude-opus-5-5-lo", "argon-4-hi", "argon-4-med", "argon-4-lo", "neon-4-hi", "neon-4-med", "neon-4-lo", "neon-4-xhigh", "hydrogen-4-hi", "hydrogen-4-med", "hydrogen-4-lo", "hydrogen-4-xhigh", "gpt-oss-120b-med", "orchestrator-argon", "orchestrator-neon"])
             .optional()
-            .describe("Model tier. flash-3.8-med (default) = Gemini 3.8 Flash Medium (works on every account). flash-3.8-hi = Gemini 3.8 Flash High, flash-3.8-lo = cheapest Flash. claude-sonnet-5-5-hi/med/lo = Claude Sonnet 5.5 (requires a Pro or Ultra plan). claude-opus-5-5-hi/med/lo = Claude Opus 5.5 (requires a Pro or Ultra plan). argon-4-hi/med/lo = Gemini 4 Argon (requires a paid Pro or Ultra plan; trial plans excluded). neon-4-hi/med/lo/xhigh = Gemini 4 Neon (paid Pro/Ultra plans, Pro trials with eligible premium devices, or Gemini Enterprise; four effort levels including XHigh; launched Nov 18, 2026). hydrogen-4-hi/med/lo/xhigh = Gemini 4 Hydrogen (four effort levels including XHigh; run `agy models` to check availability). gpt-oss-120b-med = GPT-OSS 120B (runs on Free/Plus/Pro/Ultra plans; upstream lists a Nov 18, 2026 removal date, availability may end without notice). Gemini 3.6/3.7 Flash and 3.1 Pro tiers were removed upstream (Enterprise-only) and now return INVALID_TIER."),
+            .describe("Model tier. When omitted, the plugin auto-routes: simple tasks use flash-3.8-med, normal coding uses hydrogen-4-med, hard tasks use hydrogen-4-hi (pass claude-opus-5-5-hi to use Opus 5.5). An explicit tier or model always wins. flash-3.8-med = Gemini 3.8 Flash Medium (works on every account). flash-3.8-hi = Gemini 3.8 Flash High, flash-3.8-lo = cheapest Flash. claude-sonnet-5-5-hi/med/lo = Claude Sonnet 5.5 (requires a Pro or Ultra plan). claude-opus-5-5-hi/med/lo = Claude Opus 5.5 (requires a Pro or Ultra plan). argon-4-hi/med/lo = Gemini 4 Argon (requires a paid Pro or Ultra plan; trial plans excluded). neon-4-hi/med/lo/xhigh = Gemini 4 Neon (paid Pro/Ultra plans, Pro trials with eligible premium devices, or Gemini Enterprise; four effort levels including XHigh; launched Nov 18, 2026). hydrogen-4-hi/med/lo/xhigh = Gemini 4 Hydrogen (four effort levels including XHigh; run `agy models` to check availability). gpt-oss-120b-med = GPT-OSS 120B (runs on Free/Plus/Pro/Ultra plans; upstream lists a Nov 18, 2026 removal date, availability may end without notice). orchestrator-argon / orchestrator-neon = Orchestrator (Argon/Neon). Gemini 3.6/3.7 Flash and 3.1 Pro tiers were removed upstream (Enterprise-only) and now return INVALID_TIER."),
 
           dir: tool.schema
             .string()
@@ -95,10 +101,19 @@ const v1Server: Plugin = async (ctx) => {
             .string()
             .optional()
             .describe("Exact model name override (advanced / future-proof). Example: 'Gemini 3.1 Pro (High)'."),
+
+          files: tool.schema
+            .array(tool.schema.string())
+            .optional()
+            .describe("Optional paths inside the workspace to attach. Only these files (plus paths mentioned in the prompt that exist in the workspace) are sent to agy."),
         },
 
         async execute(args, context) {
           try {
+            const workspaceRoot =
+              typeof (ctx as any)?.directory === "string" && (ctx as any).directory
+                ? (ctx as any).directory
+                : undefined;
             const result = await runAgy({
               prompt: args.prompt,
               tier: args.tier,
@@ -110,7 +125,9 @@ const v1Server: Plugin = async (ctx) => {
               continue: args.continue,
               conversation: args.conversation,
               model: args.model,
+              files: args.files,
               signal: (context as any)?.signal,
+              ...(workspaceRoot ? { policy: { workspaceRoot } } : {}),
             });
 
             return buildAgyToolResult(args, result);
@@ -174,24 +191,23 @@ const v1Server: Plugin = async (ctx) => {
       }
       upsertRegistryEntry(cfg.command as any, "agy", createAgyCommand(), isCommandDef);
     },
+    dispose: async () => {
+      await disposeAgyAcp();
+    },
   };
 };
 
-const AgyPlugin = v1Server as UniversalAgyPlugin;
-AgyPlugin.id = "opencode-agy";
-AgyPlugin.server = v1Server;
-AgyPlugin.setup = setupV2Plugin;
+// OpenCode 2.x Schema.Struct requires the default export to be a plain
+// object with `id` and `setup` (or `effect`). A function with those
+// properties attached fails to load: "Expected object at [\"default\"]".
+// Official dual-export shape (docs: migrate-v1): V2 calls setup();
+// OpenCode 1.18.29+ calls server(). Named function exports stay forbidden
+// because OpenCode 1.19.4's legacy loader invokes every function export.
+// Guarded by tests/entry-export-surface.test.ts.
+const AgyPlugin: UniversalAgyPlugin = {
+  id: "opencode-agy",
+  server: v1Server,
+  setup: setupV2Plugin,
+};
 
-// The entry module's runtime export surface MUST stay exactly { default }:
-// opencode 1.19.4's legacy plugin loader walks every runtime export and
-// INVOKES each distinct function export as a plugin server, pushing each
-// return value into its hooks array. Any named function export whose return
-// value is not a hooks object (setupV2Plugin -> undefined,
-// buildAgyToolResult -> a tool result, ...) becomes a bogus hook and crashes
-// the host. Programmatic consumers reach server/setup through the attached
-// properties on the default export above. Type-only exports (`export type`,
-// `export interface`) are erased by the bundler and are allowed. All
-// helpers live in src/agy-runner.ts, src/agy-command.ts and src/agy-v2.ts
-// for tests and internal use; the AGY_V2_TOOL_SCHEMA object stays in
-// src/agy-v2.ts. Guarded by tests/entry-export-surface.test.ts.
 export default AgyPlugin;

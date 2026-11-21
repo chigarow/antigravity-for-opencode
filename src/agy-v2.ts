@@ -1,5 +1,6 @@
-import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets, type AgyResult } from "./agy-runner";
+import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets, resolvedTier, type AgyResult } from "./agy-runner";
 import { createAgyCommand, upsertRegistryEntry } from "./agy-command";
+import { prewarmAgyAcp } from "./agy-acp";
 import agySkillMarkdown from "../skills/opencode-agy/SKILL.md";
 
 /**
@@ -37,9 +38,11 @@ export const AGY_V2_TOOL_SCHEMA = {
         "hydrogen-4-lo",
         "hydrogen-4-xhigh",
         "gpt-oss-120b-med",
+        "orchestrator-argon",
+        "orchestrator-neon",
       ],
       description:
-        "Model tier. flash-3.8-med (default) = Gemini 3.8 Flash Medium (works on every account). flash-3.8-hi = Gemini 3.8 Flash High, flash-3.8-lo = cheapest Flash. claude-sonnet-5-5-hi/med/lo = Claude Sonnet 5.5 (requires a Pro or Ultra plan). claude-opus-5-5-hi/med/lo = Claude Opus 5.5 (requires a Pro or Ultra plan). argon-4-hi/med/lo = Gemini 4 Argon (requires a paid Pro or Ultra plan; trial plans excluded). neon-4-hi/med/lo/xhigh = Gemini 4 Neon (paid Pro/Ultra plans, Pro trials with eligible premium devices, or Gemini Enterprise; four effort levels including XHigh; launched Nov 18, 2026). hydrogen-4-hi/med/lo/xhigh = Gemini 4 Hydrogen (four effort levels including XHigh; run `agy models` to check availability). gpt-oss-120b-med = GPT-OSS 120B (runs on Free/Plus/Pro/Ultra plans; upstream lists a Nov 18, 2026 removal date, availability may end without notice). Gemini 3.6/3.7 Flash and 3.1 Pro tiers were removed upstream (Enterprise-only) and now return INVALID_TIER.",
+        "Model tier. When omitted, the plugin auto-routes: simple tasks use flash-3.8-med, normal coding uses hydrogen-4-med, hard tasks use hydrogen-4-hi (pass claude-opus-5-5-hi to use Opus 5.5). An explicit tier or model always wins. flash-3.8-med = Gemini 3.8 Flash Medium (works on every account). flash-3.8-hi = Gemini 3.8 Flash High, flash-3.8-lo = cheapest Flash. claude-sonnet-5-5-hi/med/lo = Claude Sonnet 5.5 (requires a Pro or Ultra plan). claude-opus-5-5-hi/med/lo = Claude Opus 5.5 (requires a Pro or Ultra plan). argon-4-hi/med/lo = Gemini 4 Argon (requires a paid Pro or Ultra plan; trial plans excluded). neon-4-hi/med/lo/xhigh = Gemini 4 Neon (paid Pro/Ultra plans, Pro trials with eligible premium devices, or Gemini Enterprise; four effort levels including XHigh; launched Nov 18, 2026). hydrogen-4-hi/med/lo/xhigh = Gemini 4 Hydrogen (four effort levels including XHigh; run `agy models` to check availability). gpt-oss-120b-med = GPT-OSS 120B (runs on Free/Plus/Pro/Ultra plans; upstream lists a Nov 18, 2026 removal date, availability may end without notice). orchestrator-argon / orchestrator-neon = Orchestrator (Argon/Neon). Gemini 3.6/3.7 Flash and 3.1 Pro tiers were removed upstream (Enterprise-only) and now return INVALID_TIER.",
     },
     dir: {
       type: "string",
@@ -85,6 +88,11 @@ export const AGY_V2_TOOL_SCHEMA = {
       description:
         "Exact model name override (advanced / future-proof). Example: 'Claude Sonnet 5.5 (High)'.",
     },
+    files: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional paths inside the workspace to attach. Only these files (plus paths mentioned in the prompt that exist in the workspace) are sent to agy.",
+    },
   },
   required: ["prompt"],
   additionalProperties: false,
@@ -112,7 +120,8 @@ export function buildAgyV2ToolResult(
 
   const header = [
     `## agy result`,
-    `tier: ${args.tier ?? "flash-3.8-med"}`,
+    `tier: ${result.tier ?? args.tier ?? resolvedTier({ prompt: args.prompt, tier: args.tier, model: args.model, files: args.files }) ?? "auto"}`,
+    result.transport ? `transport: ${result.transport}` : "",
     `duration: ${result.durationMs}ms`,
     `exit: ${result.exitCode}`,
     args.sandbox ? `sandbox: true` : "",
@@ -128,7 +137,7 @@ export function buildAgyV2ToolResult(
   return {
     content,
     metadata: {
-      tier: args.tier ?? "flash-3.8-med",
+      tier: result.tier ?? args.tier ?? resolvedTier({ prompt: args.prompt, tier: args.tier, model: args.model, files: args.files }),
       durationMs: result.durationMs,
       exitCode: result.exitCode,
       tool: "agy",
@@ -254,6 +263,12 @@ async function registerAgySkill(ctx: any): Promise<void> {
 export async function setupV2Plugin(ctx: any): Promise<void> {
   if (!ctx || typeof ctx !== "object") return;
 
+  const workspaceRoot =
+    typeof ctx.location?.directory === "string" && ctx.location.directory
+      ? ctx.location.directory
+      : undefined;
+  prewarmAgyAcp({ cwd: workspaceRoot });
+
   if (typeof ctx.tool?.transform === "function") {
     await ctx.tool.transform((editor: any) => {
       upsertRegistryEntry(editor, "agy", {
@@ -271,6 +286,10 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
         parameters: AGY_V2_TOOL_SCHEMA,
         execute: async (args: any, context?: any) => {
           try {
+            const workspaceRoot =
+              typeof ctx.location?.directory === "string" && ctx.location.directory
+                ? ctx.location.directory
+                : undefined;
             const result = await runAgy({
               prompt: args.prompt,
               tier: args.tier,
@@ -282,7 +301,12 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
               continue: args.continue,
               conversation: args.conversation,
               model: args.model,
+              files: args.files,
               signal: context?.signal,
+              // OpenCode's background server cwd is not the session directory.
+              // Use the plugin location so `dir` is confined to the project,
+              // not the process cwd.
+              ...(workspaceRoot ? { policy: { workspaceRoot } } : {}),
             });
             return buildAgyV2ToolResult(result, args);
           } catch (err: unknown) {
@@ -294,14 +318,41 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
   }
 
   if (typeof ctx.command?.transform === "function") {
-    await ctx.command.transform((editor: any) => {
+    try {
       const cmd = createAgyCommand();
-      upsertRegistryEntry(editor, "agy", {
-        name: "agy",
-        description: cmd.description,
-        template: cmd.template,
-      }, defined);
-    });
+      await ctx.command.transform((editor: any) => {
+        // OpenCode 2.x CommandDefinition requires name + execute (template
+        // alone is the V1 slash-command shape and is ignored or rejected).
+        upsertRegistryEntry(editor, "agy", {
+          name: "agy",
+          description: cmd.description,
+          template: cmd.template,
+          execute: async (input: any) => {
+            const argsText =
+              typeof input?.prompt?.text === "string"
+                ? input.prompt.text
+                : typeof input?.prompt === "string"
+                  ? input.prompt
+                  : "";
+            // Function replacer: a string replacement would interpret $&, $' and $$ in the prompt.
+            // From maintainer review of chigarow/antigravity-for-opencode#2, applied in #3.
+            const text = cmd.template.replaceAll("$ARGUMENTS", () => argsText);
+            if (typeof ctx.session?.prompt !== "function") return;
+            return await ctx.session.prompt({
+              ...(typeof input?.prompt === "object" && input.prompt ? input.prompt : {}),
+              sessionID: input.sessionID,
+              text,
+              delivery: input.delivery,
+            });
+          },
+        }, defined);
+      });
+    } catch (err: unknown) {
+      console.warn(
+        "[opencode-agy] command registration skipped:",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   await registerAgySkill(ctx);
